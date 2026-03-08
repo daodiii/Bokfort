@@ -21,6 +21,7 @@ const teamSettingsSchema = z.object({
   bankAccount: z.string().optional(),
   mvaRegistered: z.boolean().optional(),
   logoUrl: z.string().url("Ugyldig URL").optional().or(z.literal("")),
+  invoiceNumberStart: z.coerce.number().int().min(1, "Må være minst 1").optional(),
 })
 
 // --- Types ---
@@ -45,6 +46,7 @@ export type TeamSettingsFormState = {
     bankAccount?: string[]
     mvaRegistered?: string[]
     logoUrl?: string[]
+    invoiceNumberStart?: string[]
     _form?: string[]
   }
   success?: boolean
@@ -242,6 +244,9 @@ export async function updateTeamSettings(
     bankAccount: (formData.get("bankAccount") as string) || undefined,
     mvaRegistered: formData.get("mvaRegistered") === "true",
     logoUrl: (formData.get("logoUrl") as string) || "",
+    invoiceNumberStart: formData.get("invoiceNumberStart")
+      ? Number(formData.get("invoiceNumberStart"))
+      : undefined,
   }
 
   const parsed = teamSettingsSchema.safeParse(rawData)
@@ -266,6 +271,9 @@ export async function updateTeamSettings(
         bankAccount: parsed.data.bankAccount || null,
         mvaRegistered: parsed.data.mvaRegistered ?? false,
         logoUrl: parsed.data.logoUrl || null,
+        ...(parsed.data.invoiceNumberStart !== undefined && {
+          invoiceNumberSeq: parsed.data.invoiceNumberStart,
+        }),
       },
     })
 
