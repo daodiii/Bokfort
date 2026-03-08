@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -11,4 +5,213 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+enum CompanyType {
+  ENK
+  AS
+}
+
+enum TeamRole {
+  ADMIN
+  MEMBER
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+}
+
+enum CategoryType {
+  INCOME
+  EXPENSE
+}
+
+model User {
+  id            String       @id @default(cuid())
+  name          String
+  email         String       @unique
+  passwordHash  String
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  memberships   Membership[]
+  invoices      Invoice[]    @relation("CreatedByUser")
+  expenses      Expense[]    @relation("CreatedByUser")
+  incomes       Income[]     @relation("CreatedByUser")
+  importBatches ImportBatch[] @relation("ImportedByUser")
+}
+
+model Team {
+  id            String       @id @default(cuid())
+  name          String
+  companyName   String?
+  orgNumber     String?
+  companyType   CompanyType  @default(ENK)
+  address       String?
+  city          String?
+  postalCode    String?
+  mvaRegistered Boolean      @default(false)
+  bankAccount   String?
+  logoUrl       String?
+  invoiceNumberSeq Int       @default(1)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  memberships   Membership[]
+  customers     Customer[]
+  invoices      Invoice[]
+  expenses      Expense[]
+  incomes       Income[]
+  categories    Category[]
+  bankTransactions BankTransaction[]
+  importBatches ImportBatch[]
+}
+
+model Membership {
+  id      String   @id @default(cuid())
+  userId  String
+  teamId  String
+  role    TeamRole @default(MEMBER)
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team    Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, teamId])
+}
+
+model Customer {
+  id         String   @id @default(cuid())
+  name       String
+  email      String?
+  phone      String?
+  orgNumber  String?
+  address    String?
+  city       String?
+  postalCode String?
+  teamId     String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  team       Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  invoices   Invoice[]
+}
+
+model Invoice {
+  id            String        @id @default(cuid())
+  invoiceNumber Int
+  status        InvoiceStatus @default(DRAFT)
+  customerId    String
+  teamId        String
+  createdById   String
+  issueDate     DateTime      @default(now())
+  dueDate       DateTime
+  currency      String        @default("NOK")
+  subtotal      Int           @default(0)
+  mvaAmount     Int           @default(0)
+  total         Int           @default(0)
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  customer      Customer      @relation(fields: [customerId], references: [id])
+  team          Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdBy     User          @relation("CreatedByUser", fields: [createdById], references: [id])
+  lines         InvoiceLine[]
+  income        Income?
+}
+
+model InvoiceLine {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  description String
+  quantity    Int     @default(1)
+  unitPrice   Int
+  mvaRate     Int     @default(25)
+  lineTotal   Int
+  mvaAmount   Int
+
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  description String
+  amount      Int
+  mvaAmount   Int      @default(0)
+  mvaRate     Int      @default(25)
+  categoryId  String?
+  date        DateTime
+  receiptUrl  String?
+  teamId      String
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  category    Category? @relation(fields: [categoryId], references: [id])
+  team        Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdBy   User      @relation("CreatedByUser", fields: [createdById], references: [id])
+  bankTransaction BankTransaction?
+}
+
+model Income {
+  id          String   @id @default(cuid())
+  description String
+  amount      Int
+  source      String?
+  date        DateTime
+  invoiceId   String?  @unique
+  teamId      String
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  invoice     Invoice?  @relation(fields: [invoiceId], references: [id])
+  team        Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdBy   User      @relation("CreatedByUser", fields: [createdById], references: [id])
+  bankTransaction BankTransaction?
+}
+
+model BankTransaction {
+  id            String   @id @default(cuid())
+  date          DateTime
+  description   String
+  amount        Int
+  balance       Int?
+  matched       Boolean  @default(false)
+  expenseId     String?  @unique
+  incomeId      String?  @unique
+  importBatchId String
+  teamId        String
+  createdAt     DateTime @default(now())
+
+  expense       Expense?     @relation(fields: [expenseId], references: [id])
+  income        Income?      @relation(fields: [incomeId], references: [id])
+  importBatch   ImportBatch  @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
+  team          Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+}
+
+model ImportBatch {
+  id           String   @id @default(cuid())
+  filename     String
+  importedAt   DateTime @default(now())
+  teamId       String
+  importedById String
+
+  team         Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  importedBy   User     @relation("ImportedByUser", fields: [importedById], references: [id])
+  transactions BankTransaction[]
+}
+
+model Category {
+  id        String       @id @default(cuid())
+  name      String
+  type      CategoryType
+  isDefault Boolean      @default(false)
+  teamId    String?
+
+  team      Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  expenses  Expense[]
 }
