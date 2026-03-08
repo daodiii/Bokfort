@@ -9,7 +9,7 @@ import { revalidatePath } from "next/cache"
 const incomeSchema = z.object({
   description: z.string().min(1, "Beskrivelse er påkrevd"),
   amount: z
-    .number({ invalid_type_error: "Beløp må være et tall" })
+    .number({ error: "Beløp må være et tall" })
     .positive("Beløp må være større enn 0"),
   source: z.string().optional().or(z.literal("")),
   date: z.string().min(1, "Dato er påkrevd"),

@@ -1,7 +1,5 @@
 import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
-import { compare } from "bcryptjs"
-import { db } from "@/lib/db"
 
 export const { auth, handlers, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
@@ -17,6 +15,10 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null
+
+        // Dynamic imports to avoid bundling Node.js modules in Edge middleware
+        const { db } = await import("@/lib/db")
+        const { compare } = await import("bcryptjs")
 
         const user = await db.user.findUnique({
           where: { email: credentials.email as string },

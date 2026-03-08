@@ -15,7 +15,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Plus, FileText } from "lucide-react"
 import Link from "next/link"
-import type { InvoiceStatus } from "@/generated/prisma"
+import type { InvoiceStatus } from "@/generated/prisma/client"
 
 export const metadata = {
   title: "Fakturaer | Bokført",

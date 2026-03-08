@@ -10,7 +10,7 @@ import { revalidatePath } from "next/cache"
 const expenseSchema = z.object({
   description: z.string().min(1, "Beskrivelse er påkrevd"),
   amount: z
-    .number({ invalid_type_error: "Beløp må være et tall" })
+    .number({ error: "Beløp må være et tall" })
     .positive("Beløp må være større enn 0"),
   mvaRate: z.union([z.literal(0), z.literal(12), z.literal(15), z.literal(25)], {
     message: "Velg en gyldig MVA-sats",

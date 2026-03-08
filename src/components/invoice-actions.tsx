@@ -8,7 +8,7 @@ import {
   markAsPaid,
   deleteInvoice,
 } from "@/actions/invoices"
-import type { InvoiceStatus } from "@/generated/prisma"
+import type { InvoiceStatus } from "@/generated/prisma/client"
 import { Send, CheckCircle, Pencil, Trash2, Download } from "lucide-react"
 import Link from "next/link"
 

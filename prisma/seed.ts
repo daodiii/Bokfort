@@ -1,6 +1,9 @@
-import { PrismaClient, CategoryType } from "../src/generated/prisma"
+import { PrismaClient, CategoryType } from "../src/generated/prisma/client"
+import { PrismaPg } from "@prisma/adapter-pg"
+import "dotenv/config"
 
-const prisma = new PrismaClient()
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! })
+const prisma = new PrismaClient({ adapter })
 
 const defaultCategories = [
   { name: "Kontorutstyr", type: CategoryType.EXPENSE },
