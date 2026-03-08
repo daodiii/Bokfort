@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import {
   Select,
   SelectContent,
@@ -240,9 +240,7 @@ export function ExpenseForm({ categories, expense }: ExpenseFormProps) {
                   : "Oppretter..."
                 : "Lagre"}
             </Button>
-            <Button variant="outline" asChild>
-              <Link href="/utgifter">Avbryt</Link>
-            </Button>
+            <Link href="/utgifter" className={buttonVariants({ variant: "outline" })}>Avbryt</Link>
           </div>
         </form>
       </CardContent>

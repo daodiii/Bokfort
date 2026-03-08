@@ -15,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
 import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { MvaPeriodSelector } from "../mva-period-selector"
@@ -97,11 +97,9 @@ export default async function MvaOppgavePage({
       {/* Page header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" asChild>
-            <Link href="/rapporter">
+          <Link href="/rapporter" className={buttonVariants({ variant: "ghost", size: "icon" })}>
               <ArrowLeft className="size-4" />
-            </Link>
-          </Button>
+          </Link>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">MVA-oppgave</h1>
             <p className="text-muted-foreground">

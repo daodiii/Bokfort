@@ -17,7 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
 import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { notFound } from "next/navigation"
@@ -102,12 +102,10 @@ export default async function BatchDetailPage({
     <div className="space-y-6">
       {/* Page header */}
       <div className="flex items-center gap-4">
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/bank-import">
+        <Link href="/bank-import" className={buttonVariants({ variant: "outline", size: "sm" })}>
             <ArrowLeft className="size-4" />
             Tilbake
-          </Link>
-        </Button>
+        </Link>
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
             {batch.filename}

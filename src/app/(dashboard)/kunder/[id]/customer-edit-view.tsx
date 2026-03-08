@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react"
 import { updateCustomer, deleteCustomer } from "@/actions/customers"
 import { CustomerForm } from "@/components/customer-form"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Dialog,
@@ -206,9 +206,7 @@ export function CustomerEditView({
       </Card>
 
       {/* Back link */}
-      <Button variant="outline" asChild>
-        <Link href="/kunder">Tilbake til kunder</Link>
-      </Button>
+      <Link href="/kunder" className={buttonVariants({ variant: "outline" })}>Tilbake til kunder</Link>
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { getCurrentTeam } from "@/lib/auth-utils"
 import { db } from "@/lib/db"
 import { formatOrgNumber } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
 import {
   Table,
   TableBody,
@@ -57,12 +57,10 @@ export default async function KunderPage({
             Administrer kundene dine
           </p>
         </div>
-        <Button asChild>
-          <Link href="/kunder/ny">
+        <Link href="/kunder/ny" className={buttonVariants({ variant: "default" })}>
             <Plus className="size-4" />
             Ny kunde
-          </Link>
-        </Button>
+        </Link>
       </div>
 
       {/* Search */}
@@ -136,12 +134,10 @@ export default async function KunderPage({
                   : "Opprett din første kunde for å komme i gang med fakturering."}
               </p>
               {!search && (
-                <Button asChild className="mt-4">
-                  <Link href="/kunder/ny">
+                <Link href="/kunder/ny" className={buttonVariants({ variant: "default" }) + " mt-4"}>
                     <Plus className="size-4" />
                     Ny kunde
-                  </Link>
-                </Button>
+                </Link>
               )}
             </div>
           )}

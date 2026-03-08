@@ -1,7 +1,7 @@
 import { getCurrentTeam } from "@/lib/auth-utils"
 import { db } from "@/lib/db"
 import { formatCurrency, formatDate } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
 import {
   Table,
   TableBody,
@@ -68,12 +68,10 @@ export default async function UtgifterPage({
             Registrer og administrer utgiftene dine
           </p>
         </div>
-        <Button asChild>
-          <Link href="/utgifter/ny">
+        <Link href="/utgifter/ny" className={buttonVariants({ variant: "default" })}>
             <Plus className="size-4" />
             Ny utgift
-          </Link>
-        </Button>
+        </Link>
       </div>
 
       {/* Category filter */}
@@ -173,12 +171,10 @@ export default async function UtgifterPage({
                   : "Registrer din første utgift for å holde oversikt over kostnadene dine."}
               </p>
               {!categoryFilter && (
-                <Button asChild className="mt-4">
-                  <Link href="/utgifter/ny">
+                <Link href="/utgifter/ny" className={buttonVariants({ variant: "default" }) + " mt-4"}>
                     <Plus className="size-4" />
                     Ny utgift
-                  </Link>
-                </Button>
+                </Link>
               )}
             </div>
           )}

@@ -1,7 +1,7 @@
 "use client"
 
 import { useActionState, useState, useTransition } from "react"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -211,9 +211,7 @@ export function CustomerForm({
                 submitLabel
               )}
             </Button>
-            <Button variant="outline" asChild>
-              <Link href="/kunder">Avbryt</Link>
-            </Button>
+            <Link href="/kunder" className={buttonVariants({ variant: "outline" })}>Avbryt</Link>
           </div>
         </form>
       </CardContent>

@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 
 type IncomeData = {
   id: string
@@ -149,9 +149,7 @@ export function IncomeForm({ income }: IncomeFormProps) {
                   : "Oppretter..."
                 : "Lagre"}
             </Button>
-            <Button variant="outline" asChild>
-              <Link href="/inntekter">Avbryt</Link>
-            </Button>
+            <Link href="/inntekter" className={buttonVariants({ variant: "outline" })}>Avbryt</Link>
           </div>
         </form>
       </CardContent>

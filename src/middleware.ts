@@ -1,5 +1,5 @@
-import { auth } from "@/lib/auth"
 import { NextResponse } from "next/server"
+import type { NextRequest } from "next/server"
 
 const protectedPaths = [
   "/dashboard",
@@ -15,33 +15,27 @@ const protectedPaths = [
 
 const authPaths = ["/logg-inn", "/registrer"]
 
-export default auth((req) => {
-  const { pathname } = req.nextUrl
-  const isLoggedIn = !!req.auth
+export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl
 
-  const isProtected = protectedPaths.some(
-    (path) => pathname === path || pathname.startsWith(path + "/")
-  )
+  // Check for session token (NextAuth uses this cookie name)
+  const sessionToken = request.cookies.get("authjs.session-token") || request.cookies.get("__Secure-authjs.session-token")
+  const isLoggedIn = !!sessionToken
 
-  const isAuthPage = authPaths.some(
-    (path) => pathname === path || pathname.startsWith(path + "/")
-  )
+  const isProtected = protectedPaths.some((path) => pathname.startsWith(path))
+  const isAuthPage = authPaths.some((path) => pathname.startsWith(path))
 
   if (isProtected && !isLoggedIn) {
-    const loginUrl = new URL("/logg-inn", req.nextUrl.origin)
-    loginUrl.searchParams.set("callbackUrl", pathname)
-    return NextResponse.redirect(loginUrl)
+    return NextResponse.redirect(new URL("/logg-inn", request.url))
   }
 
   if (isAuthPage && isLoggedIn) {
-    return NextResponse.redirect(new URL("/dashboard", req.nextUrl.origin))
+    return NextResponse.redirect(new URL("/dashboard", request.url))
   }
 
   return NextResponse.next()
-})
+}
 
 export const config = {
-  matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico).*)",
-  ],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
 }

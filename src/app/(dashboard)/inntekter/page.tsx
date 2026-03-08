@@ -1,7 +1,7 @@
 import { getCurrentTeam } from "@/lib/auth-utils"
 import { db } from "@/lib/db"
 import { formatCurrency, formatDate } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
 import {
   Table,
   TableBody,
@@ -48,12 +48,10 @@ export default async function InntekterPage() {
             Registrer og administrer inntektene dine
           </p>
         </div>
-        <Button asChild>
-          <Link href="/inntekter/ny">
+        <Link href="/inntekter/ny" className={buttonVariants({ variant: "default" })}>
             <Plus className="size-4" />
             Ny inntekt
-          </Link>
-        </Button>
+        </Link>
       </div>
 
       {/* Incomes table */}
@@ -131,12 +129,10 @@ export default async function InntekterPage() {
                 Registrer din første inntekt for å holde oversikt over
                 inntektene dine.
               </p>
-              <Button asChild className="mt-4">
-                <Link href="/inntekter/ny">
+              <Link href="/inntekter/ny" className={buttonVariants({ variant: "default" }) + " mt-4"}>
                   <Plus className="size-4" />
                   Ny inntekt
-                </Link>
-              </Button>
+              </Link>
             </div>
           )}
         </CardContent>

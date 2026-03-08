@@ -46,12 +46,13 @@ export async function GET(
   }
 
   // Render PDF to buffer
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const buffer = await renderToBuffer(
-    React.createElement(InvoicePdf, { invoice, team })
+    React.createElement(InvoicePdf, { invoice, team }) as any
   )
 
   // Return PDF response
-  return new NextResponse(buffer, {
+  return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `inline; filename="faktura-${invoice.invoiceNumber}.pdf"`,
