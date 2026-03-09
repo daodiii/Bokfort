@@ -1,6 +1,7 @@
 import { getCurrentTeam } from "@/lib/auth-utils"
 import { SidebarNav, MobileNav } from "@/components/sidebar-nav"
 import { UserMenu } from "@/components/user-menu"
+import { AiChatBubble } from "@/components/ai-chat-bubble"
 
 export default async function DashboardLayout({
   children,
@@ -34,6 +35,8 @@ export default async function DashboardLayout({
           </div>
         </main>
       </div>
+
+      <AiChatBubble />
     </div>
   )
 }
