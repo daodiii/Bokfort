@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ReceiptDropZone } from "@/components/receipt-dropzone"
+import { CategorySuggestion } from "@/components/category-suggestion"
 import type { ScanReceiptResult } from "@/actions/ai"
 
 type Category = {
@@ -223,6 +224,11 @@ export function ExpenseForm({ categories, expense }: ExpenseFormProps) {
                   {state.errors.categoryId[0]}
                 </p>
               )}
+              <CategorySuggestion
+                description={description}
+                amount={amountNum}
+                onAccept={(catId) => setCategoryId(catId)}
+              />
             </div>
 
             <div className="flex flex-col gap-2">
