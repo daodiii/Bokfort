@@ -4,6 +4,7 @@ import { getCurrentTeam } from "@/lib/auth-utils"
 import { scanReceipt as scanReceiptAI, type OcrResult } from "@/lib/ai/ocr"
 import { categorizeTransaction, categorizeBulk, type CategorizationResult, type BulkCategorizationResult } from "@/lib/ai/categorize"
 import { preFilterCandidates, reconcileTransactions, type ReconciliationMatch } from "@/lib/ai/reconcile"
+import { prescanAnomalies, analyzeAnomalies, type Anomaly } from "@/lib/ai/anomaly"
 import { db } from "@/lib/db"
 
 export type ScanReceiptResult = {
@@ -185,5 +186,58 @@ export async function getReconciliationSuggestions(batchId: string): Promise<Rec
     return { data: result.matches }
   } catch {
     return { error: "Kunne ikke generere avstemmingsforslag." }
+  }
+}
+
+export type AnomalyActionResult = {
+  data?: Anomaly[]
+  error?: string
+}
+
+export async function getAnomaliesAction(): Promise<AnomalyActionResult> {
+  try {
+    const { team } = await getCurrentTeam()
+
+    const ninetyDaysAgo = new Date()
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
+
+    const expenses = await db.expense.findMany({
+      where: { teamId: team.id, date: { gte: ninetyDaysAgo } },
+      include: { category: { select: { name: true } } },
+      orderBy: { date: "desc" },
+    })
+
+    const expenseRecords = expenses.map((e: { id: string; description: string; amount: number; date: Date; mvaRate: number; receiptUrl: string | null; category: { name: string } | null }) => ({
+      id: e.id,
+      description: e.description,
+      amount: e.amount,
+      date: e.date.toISOString().split("T")[0],
+      mvaRate: e.mvaRate,
+      receiptUrl: e.receiptUrl,
+      categoryName: e.category?.name ?? null,
+    }))
+
+    const { flagged, candidatesForAi } = prescanAnomalies(expenseRecords)
+
+    let aiAnomalies: Anomaly[] = []
+    if (candidatesForAi.length > 0) {
+      const categoryAmounts = new Map<string, number>()
+      const categoryCounts = new Map<string, number>()
+      for (const e of expenseRecords) {
+        const cat = e.categoryName ?? "Ukategorisert"
+        categoryAmounts.set(cat, (categoryAmounts.get(cat) ?? 0) + e.amount)
+        categoryCounts.set(cat, (categoryCounts.get(cat) ?? 0) + 1)
+      }
+      const categoryAverages = new Map<string, number>()
+      for (const [cat, total] of categoryAmounts) {
+        categoryAverages.set(cat, Math.round(total / (categoryCounts.get(cat) ?? 1)))
+      }
+
+      aiAnomalies = await analyzeAnomalies(candidatesForAi.slice(0, 10), categoryAverages)
+    }
+
+    return { data: [...flagged, ...aiAnomalies] }
+  } catch {
+    return { error: "Kunne ikke kjøre uregelmessighetssjekk." }
   }
 }

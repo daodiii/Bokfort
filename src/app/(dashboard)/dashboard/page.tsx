@@ -25,6 +25,7 @@ import {
   TrendingDown,
   Minus,
 } from "lucide-react"
+import { AnomalyAlerts } from "@/components/anomaly-alerts"
 
 export const metadata = {
   title: "Oversikt | Bokført",
@@ -130,6 +131,9 @@ export default async function DashboardPage() {
           Velkommen tilbake. Her er en oppsummering for denne måneden.
         </p>
       </div>
+
+      {/* Anomaly alerts */}
+      <AnomalyAlerts />
 
       {/* Summary cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
