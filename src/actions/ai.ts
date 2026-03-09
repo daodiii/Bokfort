@@ -5,6 +5,7 @@ import { scanReceipt as scanReceiptAI, type OcrResult } from "@/lib/ai/ocr"
 import { categorizeTransaction, categorizeBulk, type CategorizationResult, type BulkCategorizationResult } from "@/lib/ai/categorize"
 import { preFilterCandidates, reconcileTransactions, type ReconciliationMatch } from "@/lib/ai/reconcile"
 import { prescanAnomalies, analyzeAnomalies, type Anomaly } from "@/lib/ai/anomaly"
+import { suggestInvoiceLines, type InvoiceSuggestion } from "@/lib/ai/invoice"
 import { db } from "@/lib/db"
 
 export type ScanReceiptResult = {
@@ -239,5 +240,49 @@ export async function getAnomaliesAction(): Promise<AnomalyActionResult> {
     return { data: [...flagged, ...aiAnomalies] }
   } catch {
     return { error: "Kunne ikke kjøre uregelmessighetssjekk." }
+  }
+}
+
+export type InvoiceSuggestionResult = {
+  data?: InvoiceSuggestion
+  error?: string
+}
+
+export async function getInvoiceSuggestions(
+  customerId: string,
+  briefDescription?: string
+): Promise<InvoiceSuggestionResult> {
+  try {
+    const { team } = await getCurrentTeam()
+
+    const customer = await db.customer.findFirst({
+      where: { id: customerId, teamId: team.id },
+      select: { name: true },
+    })
+
+    if (!customer) return { error: "Kunde ikke funnet." }
+
+    const pastInvoices = await db.invoice.findMany({
+      where: { customerId, teamId: team.id },
+      orderBy: { createdAt: "desc" },
+      take: 3,
+      include: {
+        lines: {
+          select: { description: true, quantity: true, unitPrice: true, mvaRate: true },
+        },
+      },
+    })
+
+    const history = pastInvoices.map((inv: { invoiceNumber: number; issueDate: Date; lines: { description: string; quantity: number; unitPrice: number; mvaRate: number }[]; notes: string | null }) => ({
+      invoiceNumber: inv.invoiceNumber,
+      issueDate: inv.issueDate.toISOString().split("T")[0],
+      lines: inv.lines,
+      notes: inv.notes,
+    }))
+
+    const result = await suggestInvoiceLines(customer.name, history, briefDescription)
+    return { data: result }
+  } catch {
+    return { error: "Kunne ikke generere forslag." }
   }
 }

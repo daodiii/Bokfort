@@ -12,6 +12,7 @@ import { formatCurrency, kronerToOre, oreToKroner } from "@/lib/utils"
 import { createInvoice, updateInvoice } from "@/actions/invoices"
 import type { InvoiceFormData } from "@/actions/invoices"
 import { Plus, Trash2 } from "lucide-react"
+import { InvoiceSuggestions } from "@/components/invoice-suggestions"
 
 type Customer = {
   id: string
@@ -162,6 +163,21 @@ export function InvoiceForm({ customers, invoice }: InvoiceFormProps) {
               <p className="text-sm text-destructive">{errors.customerId[0]}</p>
             )}
           </div>
+
+          {!invoice && customerId && (
+            <InvoiceSuggestions
+              customerId={customerId}
+              onAccept={(suggestedLines, suggestedNotes) => {
+                setLines(suggestedLines.map((l) => ({
+                  description: l.description,
+                  quantity: l.quantity,
+                  unitPriceKroner: oreToKroner(l.unitPrice),
+                  mvaRate: l.mvaRate,
+                })))
+                if (suggestedNotes) setNotes(suggestedNotes)
+              }}
+            />
+          )}
 
           {/* Dates */}
           <div className="grid gap-4 sm:grid-cols-2">
