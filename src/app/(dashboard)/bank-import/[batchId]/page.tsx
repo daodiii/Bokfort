@@ -22,6 +22,7 @@ import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { TransactionMatcher } from "@/components/transaction-matcher"
+import { ReconciliationSuggestions } from "@/components/reconciliation-suggestions"
 
 export const metadata = {
   title: "Transaksjoner | Bokført",
@@ -116,6 +117,8 @@ export default async function BatchDetailPage({
           </p>
         </div>
       </div>
+
+      <ReconciliationSuggestions batchId={batchId} />
 
       {/* Transactions table */}
       <Card>

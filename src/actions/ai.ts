@@ -3,6 +3,7 @@
 import { getCurrentTeam } from "@/lib/auth-utils"
 import { scanReceipt as scanReceiptAI, type OcrResult } from "@/lib/ai/ocr"
 import { categorizeTransaction, categorizeBulk, type CategorizationResult, type BulkCategorizationResult } from "@/lib/ai/categorize"
+import { preFilterCandidates, reconcileTransactions, type ReconciliationMatch } from "@/lib/ai/reconcile"
 import { db } from "@/lib/db"
 
 export type ScanReceiptResult = {
@@ -119,5 +120,70 @@ export async function categorizeBulkAction(
     return { data: { results: allResults } }
   } catch {
     return { error: "Kunne ikke kategorisere transaksjonene." }
+  }
+}
+
+export type ReconcileResult = {
+  data?: ReconciliationMatch[]
+  error?: string
+}
+
+export async function getReconciliationSuggestions(batchId: string): Promise<ReconcileResult> {
+  try {
+    const { team } = await getCurrentTeam()
+
+    const unmatchedTxs = await db.bankTransaction.findMany({
+      where: { importBatchId: batchId, teamId: team.id, matched: false },
+      select: { id: true, date: true, description: true, amount: true },
+    })
+
+    if (unmatchedTxs.length === 0) return { data: [] }
+
+    const [expenses, incomes] = await Promise.all([
+      db.expense.findMany({
+        where: { teamId: team.id, bankTransaction: null },
+        select: { id: true, description: true, amount: true, date: true },
+      }),
+      db.income.findMany({
+        where: { teamId: team.id, bankTransaction: null },
+        select: { id: true, description: true, amount: true, date: true },
+      }),
+    ])
+
+    const candidates = [
+      ...expenses.map((e: { id: string; description: string; amount: number; date: Date }) => ({
+        id: e.id,
+        description: e.description,
+        amount: e.amount,
+        date: e.date.toISOString().split("T")[0],
+        type: "expense" as const,
+      })),
+      ...incomes.map((i: { id: string; description: string; amount: number; date: Date }) => ({
+        id: i.id,
+        description: i.description,
+        amount: i.amount,
+        date: i.date.toISOString().split("T")[0],
+        type: "income" as const,
+      })),
+    ]
+
+    const transactionsWithCandidates = unmatchedTxs.map((tx: { id: string; date: Date; description: string; amount: number }) => ({
+      id: tx.id,
+      date: tx.date.toISOString().split("T")[0],
+      description: tx.description,
+      amount: tx.amount,
+      candidates: preFilterCandidates(
+        { ...tx, date: tx.date.toISOString().split("T")[0] },
+        candidates
+      ),
+    }))
+
+    const hasCandidates = transactionsWithCandidates.some((t: { candidates: unknown[] }) => t.candidates.length > 0)
+    if (!hasCandidates) return { data: [] }
+
+    const result = await reconcileTransactions(transactionsWithCandidates)
+    return { data: result.matches }
+  } catch {
+    return { error: "Kunne ikke generere avstemmingsforslag." }
   }
 }
