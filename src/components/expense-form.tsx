@@ -1,6 +1,6 @@
 "use client"
 
-import { useActionState, useState, useEffect } from "react"
+import { useActionState, useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
@@ -26,6 +26,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { ReceiptDropZone } from "@/components/receipt-dropzone"
+import type { ScanReceiptResult } from "@/actions/ai"
 
 type Category = {
   id: string
@@ -47,6 +49,8 @@ type ExpenseFormProps = {
   expense?: ExpenseData
 }
 
+type OcrData = NonNullable<ScanReceiptResult["data"]>
+
 const initialState: ExpenseState = {}
 
 export function ExpenseForm({ categories, expense }: ExpenseFormProps) {
@@ -59,12 +63,33 @@ export function ExpenseForm({ categories, expense }: ExpenseFormProps) {
 
   const [state, formAction, isPending] = useActionState(action, initialState)
 
+  // Format the date for the input field (YYYY-MM-DD)
+  const defaultDate = expense
+    ? new Date(expense.date).toISOString().split("T")[0]
+    : new Date().toISOString().split("T")[0]
+
   const [amount, setAmount] = useState(
     expense ? (expense.amount / 100).toString() : ""
   )
   const [mvaRate, setMvaRate] = useState(
     expense ? expense.mvaRate.toString() : "25"
   )
+  const [description, setDescription] = useState(expense?.description ?? "")
+  const [date, setDate] = useState(defaultDate)
+  const [categoryId, setCategoryId] = useState(expense?.categoryId ?? "")
+
+  const handleScanComplete = useCallback((data: OcrData) => {
+    setDescription(data.description)
+    setAmount(data.amount.toString())
+    setMvaRate(data.mvaRate.toString())
+    setDate(data.date)
+    const matchedCat = categories.find(
+      (c) => c.name.toLowerCase() === data.suggestedCategory.toLowerCase()
+    )
+    if (matchedCat) {
+      setCategoryId(matchedCat.id)
+    }
+  }, [categories])
 
   useEffect(() => {
     if (state.success) {
@@ -80,11 +105,6 @@ export function ExpenseForm({ categories, expense }: ExpenseFormProps) {
   const netOre = extractNet(grossOre, mvaRateNum)
   const mvaAmountOre = calculateMva(netOre, mvaRateNum)
 
-  // Format the date for the input field (YYYY-MM-DD)
-  const defaultDate = expense
-    ? new Date(expense.date).toISOString().split("T")[0]
-    : new Date().toISOString().split("T")[0]
-
   return (
     <Card>
       <CardHeader>
@@ -98,6 +118,8 @@ export function ExpenseForm({ categories, expense }: ExpenseFormProps) {
             </div>
           )}
 
+          <ReceiptDropZone onScanComplete={handleScanComplete} />
+
           <div className="flex flex-col gap-2">
             <Label htmlFor="description">Beskrivelse</Label>
             <Input
@@ -106,7 +128,8 @@ export function ExpenseForm({ categories, expense }: ExpenseFormProps) {
               type="text"
               placeholder="Hva er utgiften for?"
               required
-              defaultValue={expense?.description ?? ""}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
             />
             {state.errors?.description && (
               <p className="text-xs text-destructive">
@@ -140,7 +163,7 @@ export function ExpenseForm({ categories, expense }: ExpenseFormProps) {
               <Label htmlFor="mvaRate">MVA-sats</Label>
               <Select
                 name="mvaRate"
-                defaultValue={mvaRate}
+                value={mvaRate}
                 onValueChange={(val: string | null) => {
                   if (val) setMvaRate(val)
                 }}
@@ -179,7 +202,10 @@ export function ExpenseForm({ categories, expense }: ExpenseFormProps) {
               <Label htmlFor="categoryId">Kategori</Label>
               <Select
                 name="categoryId"
-                defaultValue={expense?.categoryId ?? undefined}
+                value={categoryId || undefined}
+                onValueChange={(val: string | null) => {
+                  if (val) setCategoryId(val)
+                }}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Velg kategori" />
@@ -206,7 +232,8 @@ export function ExpenseForm({ categories, expense }: ExpenseFormProps) {
                 name="date"
                 type="date"
                 required
-                defaultValue={defaultDate}
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
               />
               {state.errors?.date && (
                 <p className="text-xs text-destructive">
