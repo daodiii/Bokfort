@@ -24,9 +24,57 @@ enum InvoiceStatus {
   OVERDUE
 }
 
+enum InvoiceType {
+  INVOICE
+  CREDIT_NOTE
+}
+
 enum CategoryType {
   INCOME
   EXPENSE
+}
+
+enum RecurringFrequency {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum ReminderStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum PayrollStatus {
+  DRAFT
+  APPROVED
+  PAID
+}
+
+enum TravelExpenseStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  REIMBURSED
+}
+
+// ===== DOUBLE-ENTRY BOOKKEEPING =====
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum JournalEntryStatus {
+  DRAFT
+  POSTED
 }
 
 model User {
@@ -42,6 +90,10 @@ model User {
   expenses      Expense[]    @relation("CreatedByUser")
   incomes       Income[]     @relation("CreatedByUser")
   importBatches ImportBatch[] @relation("ImportedByUser")
+  timeEntries   TimeEntry[]
+  payrollRuns   PayrollRun[] @relation("ApprovedByUser")
+  travelExpenses TravelExpense[] @relation("TravelCreatedByUser")
+  travelApprovals TravelExpense[] @relation("TravelApprovedByUser")
 }
 
 model Team {
@@ -68,6 +120,16 @@ model Team {
   categories    Category[]
   bankTransactions BankTransaction[]
   importBatches ImportBatch[]
+  projects      Project[]
+  employees     Employee[]
+  payrollRuns   PayrollRun[]
+  travelExpenses TravelExpense[]
+  recurringInvoices RecurringInvoice[]
+  paymentReminders PaymentReminder[]
+  accounts       Account[]
+  journalEntries JournalEntry[]
+  voucherNumberSeq Json?         // Per-year counters: {"2025": 5, "2026": 1}
+  chartSeeded    Boolean         @default(false)
 }
 
 model Membership {
@@ -97,15 +159,23 @@ model Customer {
 
   team       Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
   invoices   Invoice[]
+  projects   Project[]
+  recurringInvoices RecurringInvoice[]
 }
 
 model Invoice {
   id            String        @id @default(cuid())
   invoiceNumber Int
+  kidNumber     String?
   status        InvoiceStatus @default(DRAFT)
+  invoiceType       InvoiceType @default(INVOICE)
+  originalInvoiceId String?
+  originalInvoice   Invoice?    @relation("CreditNoteRef", fields: [originalInvoiceId], references: [id])
+  creditNotes       Invoice[]   @relation("CreditNoteRef")
   customerId    String
   teamId        String
   createdById   String
+  projectId     String?
   issueDate     DateTime      @default(now())
   dueDate       DateTime
   currency      String        @default("NOK")
@@ -119,8 +189,13 @@ model Invoice {
   customer      Customer      @relation(fields: [customerId], references: [id])
   team          Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
   createdBy     User          @relation("CreatedByUser", fields: [createdById], references: [id])
+  project       Project?      @relation(fields: [projectId], references: [id])
   lines         InvoiceLine[]
   income        Income?
+  journalEntries JournalEntry[]
+  reminders     PaymentReminder[]
+  recurringInvoice RecurringInvoice? @relation(fields: [recurringInvoiceId], references: [id])
+  recurringInvoiceId String?
 }
 
 model InvoiceLine {
@@ -143,6 +218,7 @@ model Expense {
   mvaAmount   Int      @default(0)
   mvaRate     Int      @default(25)
   categoryId  String?
+  projectId   String?
   date        DateTime
   receiptUrl  String?
   teamId      String
@@ -151,9 +227,11 @@ model Expense {
   updatedAt   DateTime @updatedAt
 
   category    Category? @relation(fields: [categoryId], references: [id])
+  project     Project?  @relation(fields: [projectId], references: [id])
   team        Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
   createdBy   User      @relation("CreatedByUser", fields: [createdById], references: [id])
   bankTransaction BankTransaction?
+  journalEntries JournalEntry[]
 }
 
 model Income {
@@ -172,6 +250,7 @@ model Income {
   team        Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
   createdBy   User      @relation("CreatedByUser", fields: [createdById], references: [id])
   bankTransaction BankTransaction?
+  journalEntries JournalEntry[]
 }
 
 model BankTransaction {
@@ -212,6 +291,261 @@ model Category {
   isDefault Boolean      @default(false)
   teamId    String?
 
-  team      Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  expenses  Expense[]
+  team        Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  expenses    Expense[]
+  accountCode String?  // Maps to NS 4102 account code (e.g. "6800")
+}
+
+// ===== PROJECT TRACKING =====
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  customerId  String?
+  teamId      String
+  color       String   @default("#10b981")
+  isActive    Boolean  @default(true)
+  budget      Int?     // in øre
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  customer    Customer? @relation(fields: [customerId], references: [id])
+  team        Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  timeEntries TimeEntry[]
+  expenses    Expense[]
+  invoices    Invoice[]
+}
+
+// ===== TIME TRACKING =====
+
+model TimeEntry {
+  id          String   @id @default(cuid())
+  description String?
+  date        DateTime
+  hours       Float
+  projectId   String
+  userId      String
+  billable    Boolean  @default(true)
+  hourlyRate  Int?     // in øre
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ===== EMPLOYEES & PAYROLL =====
+
+model Employee {
+  id            String   @id @default(cuid())
+  name          String
+  email         String?
+  phone         String?
+  personnummer  String?
+  position      String?
+  department    String?
+  startDate     DateTime
+  endDate       DateTime?
+  monthlySalary Int      // in øre (gross)
+  taxPercent    Float    @default(30)
+  pensionPercent Float   @default(2)
+  teamId        String
+  isActive      Boolean  @default(true)
+  bankAccount   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  team          Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  payrollEntries PayrollEntry[]
+}
+
+model PayrollRun {
+  id          String        @id @default(cuid())
+  period      String        // e.g. "2026-03"
+  teamId      String
+  status      PayrollStatus @default(DRAFT)
+  totalGross  Int           @default(0) // in øre
+  totalTax    Int           @default(0)
+  totalNet    Int           @default(0)
+  totalPension Int          @default(0)
+  approvedById String?
+  approvedAt  DateTime?
+  paidAt      DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  team        Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  approvedBy  User?         @relation("ApprovedByUser", fields: [approvedById], references: [id])
+  entries     PayrollEntry[]
+  journalEntries JournalEntry[]
+}
+
+model PayrollEntry {
+  id            String     @id @default(cuid())
+  payrollRunId  String
+  employeeId    String
+  grossAmount   Int        // in øre
+  taxAmount     Int
+  pensionAmount Int
+  netAmount     Int
+  createdAt     DateTime   @default(now())
+
+  payrollRun    PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  employee      Employee   @relation(fields: [employeeId], references: [id])
+}
+
+// ===== TRAVEL EXPENSES =====
+
+model TravelExpense {
+  id          String              @id @default(cuid())
+  description String
+  destination String?
+  departDate  DateTime
+  returnDate  DateTime?
+  totalAmount Int                 @default(0) // in øre
+  mvaAmount   Int                 @default(0)
+  status      TravelExpenseStatus @default(DRAFT)
+  projectId   String?
+  teamId      String
+  createdById String
+  approvedById String?
+  approvedAt  DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdBy   User     @relation("TravelCreatedByUser", fields: [createdById], references: [id])
+  approvedBy  User?    @relation("TravelApprovedByUser", fields: [approvedById], references: [id])
+  items       TravelExpenseItem[]
+  journalEntries JournalEntry[]
+}
+
+model TravelExpenseItem {
+  id              String        @id @default(cuid())
+  travelExpenseId String
+  description     String
+  amount          Int           // in øre
+  mvaAmount       Int           @default(0)
+  mvaRate         Int           @default(0)
+  category        String        // "Transport", "Overnatting", "Diett", "Annet"
+  receiptUrl      String?
+  date            DateTime
+  createdAt       DateTime      @default(now())
+
+  travelExpense   TravelExpense @relation(fields: [travelExpenseId], references: [id], onDelete: Cascade)
+}
+
+// ===== RECURRING INVOICES =====
+
+model RecurringInvoice {
+  id          String             @id @default(cuid())
+  customerId  String
+  teamId      String
+  frequency   RecurringFrequency
+  nextRunDate DateTime
+  lastRunDate DateTime?
+  isActive    Boolean            @default(true)
+  daysDue     Int                @default(14)
+  notes       String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  customer    Customer @relation(fields: [customerId], references: [id])
+  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  lines       RecurringInvoiceLine[]
+  invoices    Invoice[]
+}
+
+model RecurringInvoiceLine {
+  id                 String           @id @default(cuid())
+  recurringInvoiceId String
+  description        String
+  quantity           Int              @default(1)
+  unitPrice          Int              // in øre
+  mvaRate            Int              @default(25)
+
+  recurringInvoice   RecurringInvoice @relation(fields: [recurringInvoiceId], references: [id], onDelete: Cascade)
+}
+
+// ===== PAYMENT REMINDERS =====
+
+model PaymentReminder {
+  id         String         @id @default(cuid())
+  invoiceId  String
+  teamId     String
+  status     ReminderStatus @default(PENDING)
+  sentAt     DateTime?
+  daysAfterDue Int          @default(7)
+  message    String?
+  createdAt  DateTime       @default(now())
+
+  invoice    Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  team       Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+}
+
+// ===== DOUBLE-ENTRY BOOKKEEPING MODELS =====
+
+model Account {
+  id          String      @id @default(cuid())
+  code        String      // NS 4102 code: "1500", "3000", etc.
+  name        String      // "Kundefordringer", "Salgsinntekter"
+  type        AccountType
+  parentCode  String?     // Grouping: "15" groups all 15xx accounts
+  isActive    Boolean     @default(true)
+  teamId      String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  team         Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  journalLines JournalLine[]
+
+  @@unique([teamId, code])
+  @@index([teamId, type])
+}
+
+model JournalEntry {
+  id              String             @id @default(cuid())
+  voucherNumber   Int                // Bilagsnummer — sequential per team per fiscal year
+  fiscalYear      Int                // Year the voucher belongs to
+  date            DateTime           // Bilagsdato
+  description     String             // Beskrivelse
+  status          JournalEntryStatus @default(POSTED)
+  teamId          String
+
+  // Source record links (at most one set per entry)
+  invoiceId       String?
+  expenseId       String?
+  incomeId        String?
+  payrollRunId    String?
+  travelExpenseId String?
+
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  team            Team            @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  invoice         Invoice?        @relation(fields: [invoiceId], references: [id])
+  expense         Expense?        @relation(fields: [expenseId], references: [id])
+  income          Income?         @relation(fields: [incomeId], references: [id])
+  payrollRun      PayrollRun?     @relation(fields: [payrollRunId], references: [id])
+  travelExpense   TravelExpense?  @relation(fields: [travelExpenseId], references: [id])
+  lines           JournalLine[]
+
+  @@unique([teamId, fiscalYear, voucherNumber])
+  @@index([teamId, fiscalYear])
+  @@index([teamId, date])
+}
+
+model JournalLine {
+  id             String       @id @default(cuid())
+  journalEntryId String
+  accountId      String
+  debitAmount    Int          @default(0) // in øre, always >= 0
+  creditAmount   Int          @default(0) // in øre, always >= 0
+  description    String?
+
+  journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  account        Account      @relation(fields: [accountId], references: [id])
+
+  @@index([accountId])
 }
