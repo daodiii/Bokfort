@@ -45,6 +45,8 @@ export default async function FakturaDetailPage({
     include: {
       customer: true,
       lines: true,
+      originalInvoice: { select: { id: true, invoiceNumber: true } },
+      creditNotes: { select: { id: true, invoiceNumber: true, status: true, total: true } },
     },
   })
 
@@ -69,7 +71,7 @@ export default async function FakturaDetailPage({
         <div className="flex-1">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight">
-              Faktura #{invoice.invoiceNumber}
+              {invoice.invoiceType === "CREDIT_NOTE" ? "Kreditnota" : "Faktura"} #{invoice.invoiceNumber}
             </h1>
             <InvoiceStatusBadge status={invoice.status} />
           </div>
@@ -77,7 +79,44 @@ export default async function FakturaDetailPage({
       </div>
 
       {/* Actions */}
-      <InvoiceActions invoiceId={invoice.id} status={invoice.status} />
+      <InvoiceActions
+        invoiceId={invoice.id}
+        status={invoice.status}
+        invoiceType={invoice.invoiceType}
+        hasOrgNumber={!!team.orgNumber}
+      />
+
+      {/* Credit note context */}
+      {invoice.invoiceType === "CREDIT_NOTE" && invoice.originalInvoice && (
+        <Card>
+          <CardContent className="pt-4">
+            <p className="text-sm text-muted-foreground">
+              Kreditnota for{" "}
+              <Link href={`/faktura/${invoice.originalInvoice.id}`} className="font-medium text-primary hover:underline">
+                Faktura #{invoice.originalInvoice.invoiceNumber}
+              </Link>
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {invoice.creditNotes.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm text-muted-foreground">Kreditnotaer</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            {invoice.creditNotes.map((cn) => (
+              <div key={cn.id} className="flex items-center justify-between text-sm">
+                <Link href={`/faktura/${cn.id}`} className="font-medium text-primary hover:underline">
+                  Kreditnota #{cn.invoiceNumber}
+                </Link>
+                <span className="text-muted-foreground">{formatCurrency(cn.total)}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Invoice details */}
       <div className="grid gap-6 lg:grid-cols-2">
@@ -136,13 +175,19 @@ export default async function FakturaDetailPage({
         </Card>
       </div>
 
-      {/* Dates */}
+      {/* Dates & KID */}
       <Card>
         <CardContent className="pt-4">
-          <div className="grid gap-4 sm:grid-cols-3 text-sm">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 text-sm">
             <div>
               <p className="text-muted-foreground">Fakturanummer</p>
               <p className="font-medium">#{invoice.invoiceNumber}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">KID-nummer</p>
+              <p className="font-medium font-mono tracking-wider">
+                {invoice.kidNumber ?? "Ikke tildelt"}
+              </p>
             </div>
             <div>
               <p className="text-muted-foreground">Fakturadato</p>
