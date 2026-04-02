@@ -3,6 +3,8 @@
 import { z } from "zod"
 import { db } from "@/lib/db"
 import { getCurrentTeam } from "@/lib/auth-utils"
+import { generateKID } from "@/lib/kid"
+import { createJournalEntry, type JournalLineInput } from "@/lib/accounting"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 
@@ -102,10 +104,14 @@ export async function createInvoice(
 
       const invoiceNumber = updatedTeam.invoiceNumberSeq - 1
 
-      // Create invoice with lines
+      // Generate KID number from invoice number
+      const kidNumber = generateKID(invoiceNumber)
+
+      // Create invoice with lines and KID
       const invoice = await tx.invoice.create({
         data: {
           invoiceNumber,
+          kidNumber,
           customerId,
           teamId: team.id,
           createdById: user.id,
@@ -262,12 +268,102 @@ export async function updateInvoiceStatus(
   }
 
   try {
-    await db.invoice.update({
-      where: { id },
-      data: { status },
+    await db.$transaction(async (tx) => {
+      await tx.invoice.update({
+        where: { id },
+        data: { status },
+      })
+
+      // Create journal entry when invoice is sent (revenue recognition)
+      if (status === "SENT" && existing.status === "DRAFT" && existing.invoiceType !== "CREDIT_NOTE") {
+        const lines: JournalLineInput[] = [
+          {
+            accountCode: "1500",
+            debitAmount: existing.total,
+            creditAmount: 0,
+            description: `Kundefordring faktura #${existing.invoiceNumber}`,
+          },
+        ]
+
+        if (team.mvaRegistered && existing.mvaAmount > 0) {
+          lines.push(
+            {
+              accountCode: "3000",
+              debitAmount: 0,
+              creditAmount: existing.subtotal,
+              description: `Salgsinntekt faktura #${existing.invoiceNumber}`,
+            },
+            {
+              accountCode: "2700",
+              debitAmount: 0,
+              creditAmount: existing.mvaAmount,
+              description: `Utgående MVA faktura #${existing.invoiceNumber}`,
+            }
+          )
+        } else {
+          lines.push({
+            accountCode: existing.mvaAmount > 0 ? "3000" : "3100",
+            debitAmount: 0,
+            creditAmount: existing.total,
+            description: `Salgsinntekt faktura #${existing.invoiceNumber}`,
+          })
+        }
+
+        await createJournalEntry(tx, {
+          teamId: team.id,
+          date: existing.issueDate,
+          description: `Faktura #${existing.invoiceNumber} sendt`,
+          lines,
+          invoiceId: id,
+        })
+      }
+
+      // Credit note journal entry — reverses the original revenue
+      if (status === "SENT" && existing.status === "DRAFT" && existing.invoiceType === "CREDIT_NOTE") {
+        const cnLines: JournalLineInput[] = [
+          {
+            accountCode: "1500",
+            debitAmount: 0,
+            creditAmount: existing.total,
+            description: `Kreditnota #${existing.invoiceNumber} - reversering kundefordring`,
+          },
+        ]
+
+        if (team.mvaRegistered && existing.mvaAmount > 0) {
+          cnLines.push(
+            {
+              accountCode: "3000",
+              debitAmount: existing.subtotal,
+              creditAmount: 0,
+              description: `Kreditnota #${existing.invoiceNumber} - reversering salgsinntekt`,
+            },
+            {
+              accountCode: "2700",
+              debitAmount: existing.mvaAmount,
+              creditAmount: 0,
+              description: `Kreditnota #${existing.invoiceNumber} - reversering utgående MVA`,
+            }
+          )
+        } else {
+          cnLines.push({
+            accountCode: existing.mvaAmount > 0 ? "3000" : "3100",
+            debitAmount: existing.total,
+            creditAmount: 0,
+            description: `Kreditnota #${existing.invoiceNumber} - reversering salgsinntekt`,
+          })
+        }
+
+        await createJournalEntry(tx, {
+          teamId: team.id,
+          date: existing.issueDate,
+          description: `Kreditnota #${existing.invoiceNumber} sendt`,
+          lines: cnLines,
+          invoiceId: id,
+        })
+      }
     })
-  } catch {
-    return { error: "Noe gikk galt ved oppdatering av status. Vennligst prøv igjen." }
+  } catch (e) {
+    return { error: `Noe gikk galt ved oppdatering av status: ${e instanceof Error ? e.message : "Vennligst prøv igjen."}` }
   }
 
   revalidatePath("/faktura")
@@ -306,13 +402,119 @@ export async function markAsPaid(id: string): Promise<{ error?: string }> {
           createdById: user.id,
         },
       })
+
+      // Journal entry: Debit Bank, Credit Kundefordringer
+      await createJournalEntry(tx, {
+        teamId: team.id,
+        date: new Date(),
+        description: `Betaling mottatt faktura #${existing.invoiceNumber}`,
+        lines: [
+          {
+            accountCode: "1920",
+            debitAmount: existing.total,
+            creditAmount: 0,
+            description: `Innbetaling faktura #${existing.invoiceNumber}`,
+          },
+          {
+            accountCode: "1500",
+            debitAmount: 0,
+            creditAmount: existing.total,
+            description: `Kundefordring oppgjort faktura #${existing.invoiceNumber}`,
+          },
+        ],
+        invoiceId: id,
+      })
     })
-  } catch {
-    return { error: "Noe gikk galt ved markering som betalt. Vennligst prøv igjen." }
+  } catch (e) {
+    return { error: `Noe gikk galt ved markering som betalt: ${e instanceof Error ? e.message : "Vennligst prøv igjen."}` }
   }
 
   revalidatePath("/faktura")
   revalidatePath(`/faktura/${id}`)
   revalidatePath("/dashboard")
   return {}
+}
+
+export async function createCreditNote(
+  originalInvoiceId: string
+): Promise<InvoiceActionResult & { invoiceId?: string }> {
+  const { user, team } = await getCurrentTeam()
+
+  // Fetch original invoice with lines
+  const original = await db.invoice.findFirst({
+    where: { id: originalInvoiceId, teamId: team.id },
+    include: { lines: true, creditNotes: { select: { total: true } } },
+  })
+
+  if (!original) {
+    return { errors: { _form: ["Fakturaen ble ikke funnet."] } }
+  }
+
+  if (original.status !== "SENT" && original.status !== "PAID") {
+    return { errors: { _form: ["Kan kun opprette kreditnota for sendte eller betalte fakturaer."] } }
+  }
+
+  if (original.invoiceType === "CREDIT_NOTE") {
+    return { errors: { _form: ["Kan ikke opprette kreditnota for en kreditnota."] } }
+  }
+
+  // Over-crediting check
+  const existingCreditTotal = original.creditNotes.reduce((sum, cn) => sum + cn.total, 0)
+  if (existingCreditTotal >= original.total) {
+    return { errors: { _form: ["Fakturaen er allerede fullt kreditert."] } }
+  }
+
+  let invoiceId: string
+
+  try {
+    const result = await db.$transaction(async (tx) => {
+      const updatedTeam = await tx.team.update({
+        where: { id: team.id },
+        data: { invoiceNumberSeq: { increment: 1 } },
+      })
+
+      const invoiceNumber = updatedTeam.invoiceNumberSeq - 1
+      const kidNumber = generateKID(invoiceNumber)
+
+      // Copy lines from original
+      const creditLines = original.lines.map((line) => ({
+        description: line.description,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        mvaRate: line.mvaRate,
+        lineTotal: line.lineTotal,
+        mvaAmount: line.mvaAmount,
+      }))
+
+      const invoice = await tx.invoice.create({
+        data: {
+          invoiceNumber,
+          kidNumber,
+          invoiceType: "CREDIT_NOTE",
+          originalInvoiceId,
+          customerId: original.customerId,
+          teamId: team.id,
+          createdById: user.id,
+          issueDate: new Date(),
+          dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+          subtotal: original.subtotal,
+          mvaAmount: original.mvaAmount,
+          total: original.total,
+          notes: `Kreditnota for faktura #${original.invoiceNumber}`,
+          lines: { create: creditLines },
+        },
+      })
+
+      return invoice
+    })
+
+    invoiceId = result.id
+  } catch {
+    return {
+      errors: { _form: ["Noe gikk galt ved opprettelse av kreditnotaen."] },
+    }
+  }
+
+  revalidatePath("/faktura")
+  redirect(`/faktura/${invoiceId}`)
 }
