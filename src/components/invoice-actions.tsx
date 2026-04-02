@@ -7,17 +7,20 @@ import {
   updateInvoiceStatus,
   markAsPaid,
   deleteInvoice,
+  createCreditNote,
 } from "@/actions/invoices"
-import type { InvoiceStatus } from "@/generated/prisma/client"
-import { Send, CheckCircle, Pencil, Trash2, Download } from "lucide-react"
+import type { InvoiceStatus, InvoiceType } from "@/generated/prisma/client"
+import { Send, CheckCircle, Pencil, Trash2, Download, FileText, CreditCard } from "lucide-react"
 import Link from "next/link"
 
 type InvoiceActionsProps = {
   invoiceId: string
   status: InvoiceStatus
+  invoiceType?: InvoiceType
+  hasOrgNumber?: boolean
 }
 
-export function InvoiceActions({ invoiceId, status }: InvoiceActionsProps) {
+export function InvoiceActions({ invoiceId, status, invoiceType, hasOrgNumber }: InvoiceActionsProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -59,6 +62,24 @@ export function InvoiceActions({ invoiceId, status }: InvoiceActionsProps) {
         Last ned PDF
       </Button>
 
+      {/* EHF download — only for sent/paid invoices with org number */}
+      {(status === "SENT" || status === "PAID") && hasOrgNumber && (
+        <>
+          <Button variant="outline" render={<Link href={`/api/faktura/${invoiceId}/ehf`} target="_blank" />}>
+            <FileText className="size-4" />
+            Last ned EHF
+          </Button>
+          <a
+            href="https://peppolvalidator.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-muted-foreground hover:underline self-center"
+          >
+            Valider EHF &rarr;
+          </a>
+        </>
+      )}
+
       {/* Status actions */}
       {status === "DRAFT" && (
         <>
@@ -95,6 +116,25 @@ export function InvoiceActions({ invoiceId, status }: InvoiceActionsProps) {
         <Button onClick={handleMarkAsPaid} disabled={isPending}>
           <CheckCircle className="size-4" />
           Merk som betalt
+        </Button>
+      )}
+
+      {/* Credit note — only for sent/paid standard invoices */}
+      {(status === "SENT" || status === "PAID") && invoiceType !== "CREDIT_NOTE" && (
+        <Button
+          variant="outline"
+          disabled={isPending}
+          onClick={() => {
+            startTransition(async () => {
+              const result = await createCreditNote(invoiceId)
+              if (result.errors?._form) {
+                alert(result.errors._form[0])
+              }
+            })
+          }}
+        >
+          <CreditCard className="size-4" />
+          Opprett kreditnota
         </Button>
       )}
     </div>
