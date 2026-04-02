@@ -1,11 +1,43 @@
 import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
+import { authConfig } from "@/auth.config"
+import { db } from "@/lib/db"
+import { compare } from "bcryptjs"
+
+// In-memory rate limiter: max 5 failed attempts per email per 15 minutes
+const loginAttempts = new Map<string, { count: number; resetAt: number }>()
+
+const MAX_ATTEMPTS = 5
+const WINDOW_MS = 15 * 60 * 1000 // 15 minutes
+
+function isRateLimited(email: string): boolean {
+  const now = Date.now()
+  const record = loginAttempts.get(email)
+
+  if (!record || now >= record.resetAt) {
+    return false
+  }
+
+  return record.count >= MAX_ATTEMPTS
+}
+
+function recordFailedAttempt(email: string): void {
+  const now = Date.now()
+  const record = loginAttempts.get(email)
+
+  if (!record || now >= record.resetAt) {
+    loginAttempts.set(email, { count: 1, resetAt: now + WINDOW_MS })
+  } else {
+    record.count++
+  }
+}
+
+function clearAttempts(email: string): void {
+  loginAttempts.delete(email)
+}
 
 export const { auth, handlers, signIn, signOut } = NextAuth({
-  session: { strategy: "jwt" },
-  pages: {
-    signIn: "/logg-inn",
-  },
+  ...authConfig,
   providers: [
     Credentials({
       name: "credentials",
@@ -16,22 +48,30 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null
 
-        // Dynamic imports to avoid bundling Node.js modules in Edge middleware
-        const { db } = await import("@/lib/db")
-        const { compare } = await import("bcryptjs")
+        const email = credentials.email as string
+
+        if (isRateLimited(email)) return null
 
         const user = await db.user.findUnique({
-          where: { email: credentials.email as string },
+          where: { email },
         })
 
-        if (!user) return null
+        if (!user) {
+          recordFailedAttempt(email)
+          return null
+        }
 
         const isValid = await compare(
           credentials.password as string,
           user.passwordHash
         )
 
-        if (!isValid) return null
+        if (!isValid) {
+          recordFailedAttempt(email)
+          return null
+        }
+
+        clearAttempts(email)
 
         return {
           id: user.id,
@@ -41,18 +81,4 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
       },
     }),
   ],
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id
-      }
-      return token
-    },
-    async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.id as string
-      }
-      return session
-    },
-  },
 })

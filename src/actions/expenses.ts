@@ -5,6 +5,8 @@ import { db } from "@/lib/db"
 import { getCurrentTeam } from "@/lib/auth-utils"
 import { kronerToOre } from "@/lib/utils"
 import { extractNet, calculateMva, type MvaRate } from "@/lib/mva"
+import { createJournalEntry, type JournalLineInput } from "@/lib/accounting"
+import { resolveExpenseAccountCode } from "@/lib/kontoplan"
 import { revalidatePath } from "next/cache"
 
 const expenseSchema = z.object({
@@ -64,26 +66,81 @@ export async function createExpense(
     const netOre = extractNet(grossOre, mvaRate as MvaRate)
     const mvaAmountOre = calculateMva(netOre, mvaRate as MvaRate)
 
-    await db.expense.create({
-      data: {
-        description,
-        amount: grossOre,
-        mvaAmount: mvaAmountOre,
-        mvaRate,
-        categoryId: categoryId || null,
-        date: new Date(date),
-        receiptUrl: receiptUrl || null,
+    await db.$transaction(async (tx) => {
+      // Look up category for account code mapping
+      let categoryName: string | null = null
+      let categoryAccountCode: string | null = null
+      if (categoryId) {
+        const category = await tx.category.findUnique({ where: { id: categoryId } })
+        categoryName = category?.name ?? null
+        categoryAccountCode = category?.accountCode ?? null
+      }
+
+      const expense = await tx.expense.create({
+        data: {
+          description,
+          amount: grossOre,
+          mvaAmount: mvaAmountOre,
+          mvaRate,
+          categoryId: categoryId || null,
+          date: new Date(date),
+          receiptUrl: receiptUrl || null,
+          teamId: team.id,
+          createdById: user.id,
+        },
+      })
+
+      // Journal entry: Debit expense account + MVA, Credit Bank
+      const expenseAccountCode = resolveExpenseAccountCode(categoryName, categoryAccountCode)
+
+      const lines: JournalLineInput[] = []
+
+      if (team.mvaRegistered && mvaAmountOre > 0) {
+        lines.push(
+          {
+            accountCode: expenseAccountCode,
+            debitAmount: netOre,
+            creditAmount: 0,
+            description,
+          },
+          {
+            accountCode: "2710",
+            debitAmount: mvaAmountOre,
+            creditAmount: 0,
+            description: `Inngående MVA – ${description}`,
+          }
+        )
+      } else {
+        lines.push({
+          accountCode: expenseAccountCode,
+          debitAmount: grossOre,
+          creditAmount: 0,
+          description,
+        })
+      }
+
+      lines.push({
+        accountCode: "1920",
+        debitAmount: 0,
+        creditAmount: grossOre,
+        description: `Betaling – ${description}`,
+      })
+
+      await createJournalEntry(tx, {
         teamId: team.id,
-        createdById: user.id,
-      },
+        date: new Date(date),
+        description: `Utgift: ${description}`,
+        lines,
+        expenseId: expense.id,
+      })
     })
 
     revalidatePath("/utgifter")
     return { success: true }
-  } catch {
+  } catch (e) {
     return {
       errors: {
-        _form: ["Noe gikk galt. Vennligst prøv igjen."],
+        _form: [`Noe gikk galt: ${e instanceof Error ? e.message : "Vennligst prøv igjen."}`],
       },
     }
   }

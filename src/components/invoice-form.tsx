@@ -2,16 +2,11 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
 import { MVA_RATES } from "@/lib/mva"
 import { formatCurrency, kronerToOre, oreToKroner } from "@/lib/utils"
 import { createInvoice, updateInvoice } from "@/actions/invoices"
 import type { InvoiceFormData } from "@/actions/invoices"
-import { Plus, Trash2 } from "lucide-react"
+import { PlusCircle, Trash2 } from "lucide-react"
 import { InvoiceSuggestions } from "@/components/invoice-suggestions"
 
 type Customer = {
@@ -28,12 +23,15 @@ type InvoiceLine = {
 
 type InvoiceFormProps = {
   customers: Customer[]
+  nextInvoiceNumber?: string
   invoice?: {
     id: string
     customerId: string
     issueDate: string
     dueDate: string
     notes: string | null
+    invoiceNumber?: number
+    kidNumber?: string | null
     lines: {
       description: string
       quantity: number
@@ -53,7 +51,7 @@ function getTodayDate(): string {
   return new Date().toISOString().split("T")[0]
 }
 
-export function InvoiceForm({ customers, invoice }: InvoiceFormProps) {
+export function InvoiceForm({ customers, nextInvoiceNumber, invoice }: InvoiceFormProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [errors, setErrors] = useState<Record<string, string[]>>({})
@@ -77,6 +75,8 @@ export function InvoiceForm({ customers, invoice }: InvoiceFormProps) {
       { description: "", quantity: 1, unitPriceKroner: 0, mvaRate: 25 },
     ]
   )
+
+  const isEditing = !!invoice
 
   function addLine() {
     setLines([
@@ -136,229 +136,456 @@ export function InvoiceForm({ customers, invoice }: InvoiceFormProps) {
     })
   }
 
+  const displayInvoiceNumber = invoice?.invoiceNumber
+    ? `INV-${invoice.invoiceNumber.toString().padStart(4, "0")}`
+    : nextInvoiceNumber ?? "---"
+
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Fakturadetaljer</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Customer selector */}
-          <div className="space-y-2">
-            <Label htmlFor="customerId">Kunde</Label>
-            <select
-              id="customerId"
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
-              className="flex h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-            >
-              <option value="">Velg kunde...</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            {errors.customerId && (
-              <p className="text-sm text-destructive">{errors.customerId[0]}</p>
+    <div className="max-w-4xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">
+            {isEditing
+              ? `Rediger faktura #${invoice.invoiceNumber}`
+              : "Opprett ny faktura"}
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-1">
+            {isEditing
+              ? "Oppdater fakturadetaljene nedenfor."
+              : "Fyll inn detaljene nedenfor for å generere en profesjonell faktura."}
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => router.back()}
+            disabled={isPending}
+            className="px-4 py-2 text-sm font-semibold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+          >
+            Avbryt
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={isPending}
+            className="px-6 py-2 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors shadow-sm shadow-primary/20 disabled:opacity-50"
+          >
+            {isPending
+              ? "Lagrer..."
+              : isEditing
+                ? "Lagre endringer"
+                : "Lagre og send"}
+          </button>
+        </div>
+      </div>
+
+      {/* Form error */}
+      {errors._form && (
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
+          {errors._form[0]}
+        </div>
+      )}
+
+      {/* Main Card */}
+      <div className="bg-white dark:bg-background-dark border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden">
+        {/* Invoice Details Form */}
+        <div className="p-6 border-b border-slate-100 dark:border-slate-800">
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-6">
+            Fakturadetaljer
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Select Client */}
+            <div className="flex flex-col gap-1.5">
+              <label
+                htmlFor="customerId"
+                className="text-sm font-semibold text-slate-700 dark:text-slate-300"
+              >
+                Velg kunde
+              </label>
+              <select
+                id="customerId"
+                value={customerId}
+                onChange={(e) => setCustomerId(e.target.value)}
+                className="w-full rounded-lg border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-slate-900 dark:text-slate-100 focus:ring-primary focus:border-primary transition-all"
+              >
+                <option value="">Velg kunde...</option>
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              {errors.customerId && (
+                <p className="text-sm text-red-500">{errors.customerId[0]}</p>
+              )}
+            </div>
+
+            {/* Invoice Number (read-only) */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                Fakturanummer
+              </label>
+              <input
+                type="text"
+                readOnly
+                value={displayInvoiceNumber}
+                className="w-full rounded-lg border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 cursor-not-allowed"
+              />
+            </div>
+
+            {/* KID Number (read-only, shown when available) */}
+            {invoice?.kidNumber && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  KID-nummer
+                </label>
+                <input
+                  type="text"
+                  readOnly
+                  value={invoice.kidNumber}
+                  className="w-full rounded-lg border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 cursor-not-allowed font-mono tracking-wider"
+                />
+              </div>
             )}
-          </div>
 
-          {!invoice && customerId && (
-            <InvoiceSuggestions
-              customerId={customerId}
-              onAccept={(suggestedLines, suggestedNotes) => {
-                setLines(suggestedLines.map((l) => ({
-                  description: l.description,
-                  quantity: l.quantity,
-                  unitPriceKroner: oreToKroner(l.unitPrice),
-                  mvaRate: l.mvaRate,
-                })))
-                if (suggestedNotes) setNotes(suggestedNotes)
-              }}
-            />
-          )}
-
-          {/* Dates */}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="issueDate">Fakturadato</Label>
-              <Input
+            {/* Issue Date */}
+            <div className="flex flex-col gap-1.5">
+              <label
+                htmlFor="issueDate"
+                className="text-sm font-semibold text-slate-700 dark:text-slate-300"
+              >
+                Fakturadato
+              </label>
+              <input
                 id="issueDate"
                 type="date"
                 value={issueDate}
                 onChange={(e) => setIssueDate(e.target.value)}
+                className="w-full rounded-lg border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-slate-900 dark:text-slate-100 focus:ring-primary focus:border-primary transition-all"
               />
               {errors.issueDate && (
-                <p className="text-sm text-destructive">{errors.issueDate[0]}</p>
+                <p className="text-sm text-red-500">{errors.issueDate[0]}</p>
               )}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="dueDate">Forfallsdato</Label>
-              <Input
+
+            {/* Due Date */}
+            <div className="flex flex-col gap-1.5">
+              <label
+                htmlFor="dueDate"
+                className="text-sm font-semibold text-slate-700 dark:text-slate-300"
+              >
+                Forfallsdato
+              </label>
+              <input
                 id="dueDate"
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
+                className="w-full rounded-lg border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-slate-900 dark:text-slate-100 focus:ring-primary focus:border-primary transition-all"
               />
               {errors.dueDate && (
-                <p className="text-sm text-destructive">{errors.dueDate[0]}</p>
+                <p className="text-sm text-red-500">{errors.dueDate[0]}</p>
               )}
             </div>
           </div>
 
+          {/* AI Suggestions */}
+          {!invoice && customerId && (
+            <div className="mt-6">
+              <InvoiceSuggestions
+                customerId={customerId}
+                onAccept={(suggestedLines, suggestedNotes) => {
+                  setLines(
+                    suggestedLines.map((l) => ({
+                      description: l.description,
+                      quantity: l.quantity,
+                      unitPriceKroner: oreToKroner(l.unitPrice),
+                      mvaRate: l.mvaRate,
+                    }))
+                  )
+                  if (suggestedNotes) setNotes(suggestedNotes)
+                }}
+              />
+            </div>
+          )}
+
           {/* Notes */}
-          <div className="space-y-2">
-            <Label htmlFor="notes">Notater</Label>
-            <Input
+          <div className="mt-6 flex flex-col gap-1.5">
+            <label
+              htmlFor="notes"
+              className="text-sm font-semibold text-slate-700 dark:text-slate-300"
+            >
+              Notater
+            </label>
+            <input
               id="notes"
+              type="text"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Valgfrie notater..."
+              className="w-full rounded-lg border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-slate-900 dark:text-slate-100 focus:ring-primary focus:border-primary transition-all placeholder:text-slate-400"
             />
           </div>
-        </CardContent>
-      </Card>
+        </div>
 
-      {/* Line items */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Linjer</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Line items header (desktop) */}
-          <div className="hidden sm:grid sm:grid-cols-[1fr_80px_120px_120px_100px_40px] sm:gap-2 sm:text-sm sm:font-medium sm:text-muted-foreground">
-            <span>Beskrivelse</span>
-            <span>Antall</span>
-            <span>Enhetspris (kr)</span>
-            <span>MVA-sats</span>
-            <span className="text-right">Sum</span>
-            <span />
+        {/* Line Items Section */}
+        <div className="p-6">
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-6">
+            Fakturalinjer
+          </h2>
+
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="border-b border-slate-100 dark:border-slate-800">
+                  <th className="text-left text-xs font-bold text-slate-400 uppercase tracking-wider pb-3 w-1/2">
+                    Beskrivelse
+                  </th>
+                  <th className="text-right text-xs font-bold text-slate-400 uppercase tracking-wider pb-3 px-4 hidden sm:table-cell">
+                    Antall
+                  </th>
+                  <th className="text-right text-xs font-bold text-slate-400 uppercase tracking-wider pb-3 px-4 hidden sm:table-cell">
+                    Enhetspris
+                  </th>
+                  <th className="text-right text-xs font-bold text-slate-400 uppercase tracking-wider pb-3 px-4 hidden sm:table-cell">
+                    MVA
+                  </th>
+                  <th className="text-right text-xs font-bold text-slate-400 uppercase tracking-wider pb-3 pl-4">
+                    Sum
+                  </th>
+                  <th className="w-10 pb-3"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {lines.map((line, index) => (
+                  <tr key={index}>
+                    {/* Description */}
+                    <td className="py-4">
+                      <input
+                        type="text"
+                        placeholder="Varebeskrivelse..."
+                        value={line.description}
+                        onChange={(e) =>
+                          updateLine(index, "description", e.target.value)
+                        }
+                        className="w-full border-none bg-transparent focus:ring-0 text-slate-900 dark:text-slate-100 p-0 text-sm placeholder:text-slate-400"
+                      />
+                      {/* Mobile-only inline fields */}
+                      <div className="sm:hidden mt-3 grid grid-cols-2 gap-3">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs font-medium text-slate-400">
+                            Antall
+                          </span>
+                          <input
+                            type="number"
+                            min={1}
+                            value={line.quantity}
+                            onChange={(e) =>
+                              updateLine(
+                                index,
+                                "quantity",
+                                parseInt(e.target.value) || 1
+                              )
+                            }
+                            className="w-full h-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-slate-900 dark:text-slate-100 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs font-medium text-slate-400">
+                            Enhetspris (kr)
+                          </span>
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={line.unitPriceKroner}
+                            onChange={(e) =>
+                              updateLine(
+                                index,
+                                "unitPriceKroner",
+                                parseFloat(e.target.value) || 0
+                              )
+                            }
+                            className="w-full h-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-slate-900 dark:text-slate-100 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1 col-span-2">
+                          <span className="text-xs font-medium text-slate-400">
+                            MVA-sats
+                          </span>
+                          <select
+                            value={line.mvaRate}
+                            onChange={(e) =>
+                              updateLine(
+                                index,
+                                "mvaRate",
+                                parseInt(e.target.value)
+                              )
+                            }
+                            className="w-full h-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-slate-900 dark:text-slate-100 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+                          >
+                            {MVA_RATES.map((rate) => (
+                              <option key={rate.rate} value={rate.rate}>
+                                {rate.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Quantity - Desktop */}
+                    <td className="py-4 px-4 hidden sm:table-cell">
+                      <input
+                        type="number"
+                        min={1}
+                        value={line.quantity}
+                        onChange={(e) =>
+                          updateLine(
+                            index,
+                            "quantity",
+                            parseInt(e.target.value) || 1
+                          )
+                        }
+                        className="w-16 text-right border-none bg-transparent focus:ring-0 text-slate-900 dark:text-slate-100 p-0 text-sm"
+                      />
+                    </td>
+
+                    {/* Unit Price - Desktop */}
+                    <td className="py-4 px-4 hidden sm:table-cell">
+                      <div className="flex items-center justify-end text-sm text-slate-900 dark:text-slate-100">
+                        <span className="mr-1">kr</span>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={line.unitPriceKroner}
+                          onChange={(e) =>
+                            updateLine(
+                              index,
+                              "unitPriceKroner",
+                              parseFloat(e.target.value) || 0
+                            )
+                          }
+                          className="w-20 text-right border-none bg-transparent focus:ring-0 p-0 text-sm"
+                        />
+                      </div>
+                    </td>
+
+                    {/* MVA Rate - Desktop */}
+                    <td className="py-4 px-4 hidden sm:table-cell">
+                      <select
+                        value={line.mvaRate}
+                        onChange={(e) =>
+                          updateLine(
+                            index,
+                            "mvaRate",
+                            parseInt(e.target.value)
+                          )
+                        }
+                        className="w-full text-right border-none bg-transparent focus:ring-0 text-slate-900 dark:text-slate-100 p-0 text-sm cursor-pointer"
+                      >
+                        {MVA_RATES.map((rate) => (
+                          <option key={rate.rate} value={rate.rate}>
+                            {rate.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+
+                    {/* Line Total */}
+                    <td className="py-4 pl-4 text-right text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      {formatCurrency(
+                        lineCalculations[index]?.lineTotalOre ?? 0
+                      )}
+                    </td>
+
+                    {/* Delete Button */}
+                    <td className="py-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => removeLine(index)}
+                        disabled={lines.length <= 1}
+                        className="text-slate-300 hover:text-red-500 transition-colors disabled:opacity-30 disabled:hover:text-slate-300"
+                      >
+                        <Trash2 className="size-5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
-          {lines.map((line, index) => (
-            <div key={index} className="space-y-2 sm:space-y-0">
-              <div className="grid gap-2 sm:grid-cols-[1fr_80px_120px_120px_100px_40px]">
-                <div>
-                  <Label className="sm:hidden text-xs text-muted-foreground">Beskrivelse</Label>
-                  <Input
-                    placeholder="Beskrivelse..."
-                    value={line.description}
-                    onChange={(e) =>
-                      updateLine(index, "description", e.target.value)
-                    }
-                  />
-                </div>
-                <div>
-                  <Label className="sm:hidden text-xs text-muted-foreground">Antall</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={line.quantity}
-                    onChange={(e) =>
-                      updateLine(index, "quantity", parseInt(e.target.value) || 1)
-                    }
-                  />
-                </div>
-                <div>
-                  <Label className="sm:hidden text-xs text-muted-foreground">Enhetspris (kr)</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={line.unitPriceKroner}
-                    onChange={(e) =>
-                      updateLine(
-                        index,
-                        "unitPriceKroner",
-                        parseFloat(e.target.value) || 0
-                      )
-                    }
-                  />
-                </div>
-                <div>
-                  <Label className="sm:hidden text-xs text-muted-foreground">MVA-sats</Label>
-                  <select
-                    value={line.mvaRate}
-                    onChange={(e) =>
-                      updateLine(index, "mvaRate", parseInt(e.target.value))
-                    }
-                    className="flex h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-                  >
-                    {MVA_RATES.map((rate) => (
-                      <option key={rate.rate} value={rate.rate}>
-                        {rate.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="text-right text-sm font-medium leading-8">
-                  <Label className="sm:hidden text-xs text-muted-foreground">Sum</Label>
-                  {formatCurrency(lineCalculations[index]?.lineTotalOre ?? 0)}
-                </div>
-                <div className="flex items-center">
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => removeLine(index)}
-                    disabled={lines.length <= 1}
-                  >
-                    <Trash2 className="size-4 text-muted-foreground" />
-                  </Button>
-                </div>
-              </div>
-              {index < lines.length - 1 && (
-                <Separator className="sm:hidden mt-2" />
-              )}
-            </div>
-          ))}
-
-          <Button variant="outline" onClick={addLine} className="w-full sm:w-auto">
-            <Plus className="size-4" />
-            Legg til linje
-          </Button>
+          {/* Add Item Button */}
+          <button
+            type="button"
+            onClick={addLine}
+            className="mt-4 flex items-center gap-2 text-primary hover:text-primary/80 font-semibold text-sm transition-colors group"
+          >
+            <PlusCircle className="size-[18px]" />
+            <span>Legg til linje</span>
+          </button>
 
           {errors.lines && (
-            <p className="text-sm text-destructive">{errors.lines[0]}</p>
+            <p className="mt-2 text-sm text-red-500">{errors.lines[0]}</p>
           )}
+        </div>
 
-          {/* Totals */}
-          <Separator />
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Delbeløp</span>
-              <span>{formatCurrency(subtotalOre)}</span>
+        {/* Summary Section */}
+        <div className="bg-slate-50 dark:bg-slate-900/30 p-6 flex flex-col items-end">
+          <div className="w-full md:w-72 space-y-3">
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-slate-500 dark:text-slate-400">
+                Delbeløp
+              </span>
+              <span className="text-slate-900 dark:text-slate-100 font-medium">
+                {formatCurrency(subtotalOre)}
+              </span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">MVA</span>
-              <span>{formatCurrency(mvaAmountOre)}</span>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-slate-500 dark:text-slate-400">MVA</span>
+              <span className="text-slate-900 dark:text-slate-100 font-medium">
+                {formatCurrency(mvaAmountOre)}
+              </span>
             </div>
-            <Separator />
-            <div className="flex justify-between text-base font-bold">
-              <span>Totalt</span>
-              <span>{formatCurrency(totalOre)}</span>
+            <div className="h-px bg-slate-200 dark:bg-slate-700 my-2"></div>
+            <div className="flex justify-between items-center">
+              <span className="text-base font-bold text-slate-900 dark:text-white">
+                Totalt
+              </span>
+              <span className="text-xl font-black text-primary">
+                {formatCurrency(totalOre)}
+              </span>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      {/* Form error */}
-      {errors._form && (
-        <p className="text-sm text-destructive">{errors._form[0]}</p>
-      )}
-
-      {/* Actions */}
-      <div className="flex gap-2 justify-end">
-        <Button
-          variant="outline"
+      {/* Action Footer Mobile View */}
+      <div className="mt-8 flex md:hidden flex-col gap-3">
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={isPending}
+          className="w-full px-6 py-3 text-sm font-bold text-white bg-primary rounded-lg shadow-sm shadow-primary/20 disabled:opacity-50"
+        >
+          {isPending
+            ? "Lagrer..."
+            : isEditing
+              ? "Lagre endringer"
+              : "Lagre og send"}
+        </button>
+        <button
+          type="button"
           onClick={() => router.back()}
           disabled={isPending}
+          className="w-full px-6 py-3 text-sm font-bold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg disabled:opacity-50"
         >
           Avbryt
-        </Button>
-        <Button onClick={handleSubmit} disabled={isPending}>
-          {isPending ? "Lagrer..." : "Lagre"}
-        </Button>
+        </button>
       </div>
     </div>
   )

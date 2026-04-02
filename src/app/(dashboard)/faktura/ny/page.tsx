@@ -15,16 +15,7 @@ export default async function NyFakturaPage() {
     select: { id: true, name: true },
   })
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Ny faktura</h1>
-        <p className="text-muted-foreground">
-          Opprett en ny faktura til en kunde.
-        </p>
-      </div>
+  const nextInvoiceNumber = `INV-${team.invoiceNumberSeq.toString().padStart(4, "0")}`
 
-      <InvoiceForm customers={customers} />
-    </div>
-  )
+  return <InvoiceForm customers={customers} nextInvoiceNumber={nextInvoiceNumber} />
 }

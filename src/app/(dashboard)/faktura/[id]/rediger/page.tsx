@@ -35,32 +35,23 @@ export default async function RedigerFakturaPage({
   })
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          Rediger faktura #{invoice.invoiceNumber}
-        </h1>
-        <p className="text-muted-foreground">
-          Oppdater fakturadetaljene nedenfor.
-        </p>
-      </div>
-
-      <InvoiceForm
-        customers={customers}
-        invoice={{
-          id: invoice.id,
-          customerId: invoice.customerId,
-          issueDate: invoice.issueDate.toISOString().split("T")[0],
-          dueDate: invoice.dueDate.toISOString().split("T")[0],
-          notes: invoice.notes,
-          lines: invoice.lines.map((line) => ({
-            description: line.description,
-            quantity: line.quantity,
-            unitPrice: line.unitPrice,
-            mvaRate: line.mvaRate,
-          })),
-        }}
-      />
-    </div>
+    <InvoiceForm
+      customers={customers}
+      invoice={{
+        id: invoice.id,
+        customerId: invoice.customerId,
+        issueDate: invoice.issueDate.toISOString().split("T")[0],
+        dueDate: invoice.dueDate.toISOString().split("T")[0],
+        notes: invoice.notes,
+        invoiceNumber: invoice.invoiceNumber,
+        kidNumber: invoice.kidNumber,
+        lines: invoice.lines.map((line) => ({
+          description: line.description,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          mvaRate: line.mvaRate,
+        })),
+      }}
+    />
   )
 }

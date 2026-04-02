@@ -1,3 +1,5 @@
+import Link from "next/link"
+
 export default function AuthLayout({
   children,
 }: {
@@ -12,6 +14,11 @@ export default function AuthLayout({
         </p>
       </div>
       <div className="w-full max-w-md">{children}</div>
+      <p className="mt-8 text-center text-xs text-muted-foreground">
+        <Link href="/personvern" className="hover:underline">
+          Personvernerklæring
+        </Link>
+      </p>
     </div>
   )
 }

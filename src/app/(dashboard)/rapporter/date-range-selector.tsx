@@ -1,10 +1,17 @@
 "use client"
 
 import { useRouter, useSearchParams } from "next/navigation"
-import { useTransition } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { useTransition, useRef } from "react"
+import { Calendar, ChevronDown } from "lucide-react"
+
+function formatDisplayDate(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00")
+  return d.toLocaleDateString("nb-NO", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  })
+}
 
 export function DateRangeSelector({
   defaultFrom,
@@ -18,16 +25,17 @@ export function DateRangeSelector({
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
+  const fromRef = useRef<HTMLInputElement>(null)
+  const toRef = useRef<HTMLInputElement>(null)
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    const formData = new FormData(e.currentTarget)
-    const fra = formData.get("fra") as string
-    const til = formData.get("til") as string
+  function handleChange() {
+    const fra = fromRef.current?.value
+    const til = toRef.current?.value
+    if (!fra || !til) return
 
     const params = new URLSearchParams(searchParams.toString())
-    if (fra) params.set("fra", fra)
-    if (til) params.set("til", til)
+    params.set("fra", fra)
+    params.set("til", til)
 
     startTransition(() => {
       router.replace(`${basePath}?${params.toString()}`)
@@ -35,30 +43,32 @@ export function DateRangeSelector({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex items-end gap-3 flex-wrap">
-      <div className="space-y-1.5">
-        <Label htmlFor="fra">Fra</Label>
-        <Input
-          type="date"
-          id="fra"
-          name="fra"
-          defaultValue={defaultFrom}
-          className="w-[160px]"
-        />
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="til">Til</Label>
-        <Input
-          type="date"
-          id="til"
-          name="til"
-          defaultValue={defaultTo}
-          className="w-[160px]"
-        />
-      </div>
-      <Button type="submit" variant="secondary" disabled={isPending}>
-        {isPending ? "Laster..." : "Oppdater"}
-      </Button>
-    </form>
+    <div className="relative flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 gap-2 shadow-sm">
+      <Calendar className="size-4 text-slate-400" />
+      <span className={`text-sm font-medium ${isPending ? "opacity-50" : ""}`}>
+        {formatDisplayDate(defaultFrom)} &ndash;{" "}
+        {formatDisplayDate(defaultTo)}
+      </span>
+      <ChevronDown className="size-4 text-slate-400" />
+
+      {/* Hidden date inputs layered on top for native date picker interaction */}
+      <input
+        ref={fromRef}
+        type="date"
+        defaultValue={defaultFrom}
+        onChange={handleChange}
+        className="absolute inset-0 cursor-pointer opacity-0"
+        aria-label="Fra dato"
+      />
+      {/* Second input positioned right-side to handle "to" date */}
+      <input
+        ref={toRef}
+        type="date"
+        defaultValue={defaultTo}
+        onChange={handleChange}
+        className="absolute right-0 top-0 h-full w-1/2 cursor-pointer opacity-0"
+        aria-label="Til dato"
+      />
+    </div>
   )
 }

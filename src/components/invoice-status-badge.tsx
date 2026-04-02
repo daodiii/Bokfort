@@ -1,4 +1,3 @@
-import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import type { InvoiceStatus } from "@/generated/prisma/client"
 
@@ -8,27 +7,32 @@ const statusConfig: Record<
 > = {
   DRAFT: {
     label: "Utkast",
-    className: "bg-muted text-muted-foreground",
+    className: "bg-slate-100 text-slate-600 border border-slate-200",
   },
   SENT: {
     label: "Sendt",
-    className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+    className: "bg-amber-100 text-amber-700 border border-amber-200",
   },
   PAID: {
     label: "Betalt",
-    className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
+    className: "bg-primary/10 text-primary border border-primary/20",
   },
   OVERDUE: {
     label: "Forfalt",
-    className: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+    className: "bg-rose-100 text-rose-700 border border-rose-200",
   },
 }
 
 export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
   const config = statusConfig[status]
   return (
-    <Badge className={cn("border-0", config.className)}>
+    <span
+      className={cn(
+        "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
+        config.className
+      )}
+    >
       {config.label}
-    </Badge>
+    </span>
   )
 }

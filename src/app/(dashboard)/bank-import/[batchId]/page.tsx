@@ -1,31 +1,13 @@
 import { getCurrentTeam } from "@/lib/auth-utils"
 import { db } from "@/lib/db"
 import { formatCurrency, formatDate } from "@/lib/utils"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { buttonVariants } from "@/components/ui/button-variants"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, CheckCircle2 } from "lucide-react"
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { TransactionMatcher } from "@/components/transaction-matcher"
-import { ReconciliationSuggestions } from "@/components/reconciliation-suggestions"
+import { BankReconciliationView } from "./bank-reconciliation-view"
 
 export const metadata = {
-  title: "Transaksjoner | Bokført",
+  title: "Avstemming | Bokført",
 }
 
 export default async function BatchDetailPage({
@@ -42,8 +24,8 @@ export default async function BatchDetailPage({
       transactions: {
         orderBy: { date: "desc" },
         include: {
-          expense: { select: { id: true, description: true } },
-          income: { select: { id: true, description: true } },
+          expense: { select: { id: true, description: true, amount: true, date: true } },
+          income: { select: { id: true, description: true, amount: true, date: true } },
         },
       },
     },
@@ -55,6 +37,19 @@ export default async function BatchDetailPage({
 
   const matchedCount = batch.transactions.filter((t) => t.matched).length
   const totalCount = batch.transactions.length
+
+  // Compute reconciliation stats
+  const matchedTransactions = batch.transactions.filter((t) => t.matched)
+  const unmatchedTransactions = batch.transactions.filter((t) => !t.matched)
+
+  const totalReconciledAmount = matchedTransactions.reduce(
+    (sum, t) => sum + Math.abs(t.amount),
+    0
+  )
+  const totalUnreconciledAmount = unmatchedTransactions.reduce(
+    (sum, t) => sum + Math.abs(t.amount),
+    0
+  )
 
   // Fetch unmatched expenses and incomes for the matcher component
   const [expenses, incomes, categories] = await Promise.all([
@@ -99,101 +94,126 @@ export default async function BatchDetailPage({
     }),
   ])
 
+  // Serialize transactions for the client component
+  const serializedTransactions = batch.transactions.map((tx) => ({
+    id: tx.id,
+    date: tx.date.toISOString(),
+    description: tx.description,
+    amount: tx.amount,
+    matched: tx.matched,
+    expense: tx.expense
+      ? {
+          id: tx.expense.id,
+          description: tx.expense.description,
+          amount: tx.expense.amount,
+          date: tx.expense.date.toISOString(),
+        }
+      : null,
+    income: tx.income
+      ? {
+          id: tx.income.id,
+          description: tx.income.description,
+          amount: tx.income.amount,
+          date: tx.income.date.toISOString(),
+        }
+      : null,
+  }))
+
+  const serializedExpenses = expenses.map((e) => ({
+    id: e.id,
+    description: e.description,
+    amount: e.amount,
+    date: e.date.toISOString(),
+  }))
+
+  const serializedIncomes = incomes.map((i) => ({
+    id: i.id,
+    description: i.description,
+    amount: i.amount,
+    date: i.date.toISOString(),
+  }))
+
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-7xl space-y-6">
       {/* Page header */}
-      <div className="flex items-center gap-4">
-        <Link href="/bank-import" className={buttonVariants({ variant: "outline", size: "sm" })}>
-            <ArrowLeft className="size-4" />
-            Tilbake
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            {batch.filename}
-          </h1>
-          <p className="text-muted-foreground">
-            Importert {formatDate(batch.importedAt)} &middot; {matchedCount} /{" "}
-            {totalCount} koblet
-          </p>
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div className="space-y-1">
+          <div className="flex items-center gap-3">
+            <Link
+              href="/bank-import"
+              className="flex size-8 items-center justify-center rounded-lg border bg-card text-muted-foreground transition-colors hover:bg-muted"
+            >
+              <ArrowLeft className="size-4" />
+            </Link>
+            <div>
+              <h1 className="text-3xl font-black tracking-tight">
+                Avstemming
+              </h1>
+              <p className="text-muted-foreground">
+                {batch.filename} &middot; Importert {formatDate(batch.importedAt)}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
-      <ReconciliationSuggestions batchId={batchId} />
+      {/* Stats cards */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="rounded-xl border border-primary/10 bg-card p-6 shadow-sm">
+          <p className="text-sm font-medium text-muted-foreground">
+            Totalt avstemt
+          </p>
+          <div className="mt-1 flex items-baseline gap-2">
+            <p className="text-2xl font-bold">
+              {formatCurrency(totalReconciledAmount)}
+            </p>
+            {totalCount > 0 && (
+              <span className="text-xs font-bold text-primary">
+                {Math.round((matchedCount / totalCount) * 100)}%
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="rounded-xl border border-primary/10 bg-card p-6 shadow-sm">
+          <p className="text-sm font-medium text-muted-foreground">
+            Ikke avstemt
+          </p>
+          <div className="mt-1 flex items-baseline gap-2">
+            <p className="text-2xl font-bold">
+              {formatCurrency(totalUnreconciledAmount)}
+            </p>
+            {unmatchedTransactions.length > 0 && (
+              <span className="text-xs font-bold text-destructive">
+                {unmatchedTransactions.length} gjenstår
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-6 shadow-sm">
+          <p className="text-sm font-medium text-muted-foreground">
+            Differanse
+          </p>
+          <div className="mt-1 flex items-baseline gap-2">
+            <p className="text-2xl font-bold text-primary">
+              {formatCurrency(totalUnreconciledAmount)}
+            </p>
+            {totalUnreconciledAmount === 0 && (
+              <CheckCircle2 className="size-5 text-primary" />
+            )}
+          </div>
+        </div>
+      </div>
 
-      {/* Transactions table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Transaksjoner ({totalCount})</CardTitle>
-          <CardDescription>
-            Koble transaksjoner til eksisterende utgifter/inntekter eller opprett
-            nye
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Dato</TableHead>
-                <TableHead>Beskrivelse</TableHead>
-                <TableHead className="text-right">Beløp</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Handling</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {batch.transactions.map((tx) => {
-                const isPositive = tx.amount > 0
-                const linkedDescription = tx.matched
-                  ? tx.expense?.description || tx.income?.description || ""
-                  : ""
-
-                return (
-                  <TableRow key={tx.id}>
-                    <TableCell className="text-muted-foreground whitespace-nowrap">
-                      {formatDate(tx.date)}
-                    </TableCell>
-                    <TableCell className="max-w-[300px] truncate">
-                      {tx.description}
-                    </TableCell>
-                    <TableCell
-                      className={`text-right font-medium whitespace-nowrap ${
-                        isPositive ? "text-green-600" : "text-red-600"
-                      }`}
-                    >
-                      {formatCurrency(tx.amount)}
-                    </TableCell>
-                    <TableCell>
-                      {tx.matched ? (
-                        <div className="flex flex-col gap-0.5">
-                          <Badge variant="secondary">Koblet</Badge>
-                          {linkedDescription && (
-                            <span className="text-xs text-muted-foreground truncate max-w-[150px]">
-                              {linkedDescription}
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <Badge variant="outline">Ikke koblet</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {!tx.matched && (
-                        <TransactionMatcher
-                          transactionId={tx.id}
-                          transactionAmount={tx.amount}
-                          expenses={expenses}
-                          incomes={incomes}
-                          categories={categories}
-                        />
-                      )}
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {/* Main reconciliation view (client component) */}
+      <BankReconciliationView
+        batchId={batchId}
+        transactions={serializedTransactions}
+        expenses={serializedExpenses}
+        incomes={serializedIncomes}
+        categories={categories}
+        matchedCount={matchedCount}
+        totalCount={totalCount}
+      />
     </div>
   )
 }
