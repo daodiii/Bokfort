@@ -3,6 +3,7 @@ import {
   Page,
   Text,
   View,
+  Image,
   StyleSheet,
 } from "@react-pdf/renderer"
 
@@ -16,6 +17,8 @@ type PdfTeam = {
   city: string | null
   postalCode: string | null
   bankAccount: string | null
+  logoUrl: string | null
+  mvaRegistered: boolean
 }
 
 type PdfCustomer = {
@@ -38,6 +41,8 @@ type PdfLine = {
 
 type PdfInvoice = {
   invoiceNumber: number
+  invoiceType: "INVOICE" | "CREDIT_NOTE"
+  kidNumber: string | null
   issueDate: Date
   dueDate: Date
   subtotal: number
@@ -77,215 +82,311 @@ function formatOrgNr(orgNr: string): string {
   return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 9)}`
 }
 
+// --- Colors ---
+
+const COLORS = {
+  navy: "#0f2b3c",
+  navyLight: "#1a3d52",
+  accent: "#0f2b3c",
+  creditRed: "#8b1a1a",
+  creditRedLight: "#a02020",
+  textPrimary: "#111827",
+  textSecondary: "#4b5563",
+  textMuted: "#9ca3af",
+  border: "#e5e7eb",
+  borderLight: "#f3f4f6",
+  backgroundMuted: "#f9fafb",
+  white: "#ffffff",
+}
+
 // --- Styles ---
 
 const styles = StyleSheet.create({
   page: {
     fontFamily: "Helvetica",
     fontSize: 9,
-    padding: 40,
-    color: "#1a1a1a",
+    color: COLORS.textPrimary,
+    paddingTop: 0,
+    paddingBottom: 60,
+    paddingHorizontal: 0,
   },
+  // Top accent bar
+  accentBar: {
+    height: 6,
+    width: "100%",
+  },
+  // Content area below the bar
+  content: {
+    paddingHorizontal: 44,
+    paddingTop: 28,
+  },
+  // Header: logo/company left, title right
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 30,
+    alignItems: "flex-start",
+    marginBottom: 32,
+  },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  logo: {
+    width: 42,
+    height: 42,
+    borderRadius: 4,
   },
   companyName: {
-    fontSize: 16,
+    fontSize: 18,
     fontFamily: "Helvetica-Bold",
-    marginBottom: 4,
+    color: COLORS.textPrimary,
+    marginBottom: 2,
+  },
+  companyOrgNr: {
+    fontSize: 8,
+    color: COLORS.textMuted,
+    letterSpacing: 0.3,
+  },
+  headerRight: {
+    alignItems: "flex-end",
   },
   invoiceTitle: {
-    fontSize: 22,
+    fontSize: 28,
     fontFamily: "Helvetica-Bold",
-    textAlign: "right" as const,
-    marginBottom: 4,
+    letterSpacing: 2,
   },
-  invoiceNumber: {
-    fontSize: 11,
-    textAlign: "right" as const,
-    color: "#666",
+  invoiceNumberBadge: {
+    marginTop: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 3,
   },
-  infoRow: {
+  invoiceNumberText: {
+    fontSize: 10,
+    fontFamily: "Helvetica-Bold",
+    color: COLORS.white,
+    letterSpacing: 0.5,
+  },
+  // Parties row (From / To)
+  partiesRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 24,
   },
-  infoBlock: {
-    width: "48%",
+  partyBlock: {
+    width: "46%",
   },
-  infoLabel: {
-    fontSize: 8,
-    color: "#888",
+  partyLabel: {
+    fontSize: 7,
+    color: COLORS.textMuted,
     textTransform: "uppercase" as const,
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  infoText: {
-    fontSize: 9,
-    lineHeight: 1.5,
-  },
-  infoBold: {
+    letterSpacing: 1.2,
+    marginBottom: 6,
     fontFamily: "Helvetica-Bold",
-    fontSize: 9,
-    marginBottom: 2,
   },
-  datesRow: {
+  partyName: {
+    fontSize: 11,
+    fontFamily: "Helvetica-Bold",
+    color: COLORS.textPrimary,
+    marginBottom: 3,
+  },
+  partyDetail: {
+    fontSize: 9,
+    color: COLORS.textSecondary,
+    lineHeight: 1.6,
+  },
+  // Metadata strip
+  metaStrip: {
     flexDirection: "row",
+    backgroundColor: COLORS.backgroundMuted,
+    borderRadius: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     marginBottom: 24,
-    gap: 40,
   },
-  dateBlock: {},
-  dateLabel: {
-    fontSize: 8,
-    color: "#888",
+  metaItem: {
+    flex: 1,
+  },
+  metaLabel: {
+    fontSize: 7,
+    color: COLORS.textMuted,
     textTransform: "uppercase" as const,
-    letterSpacing: 0.5,
-    marginBottom: 2,
-  },
-  dateValue: {
-    fontSize: 9,
+    letterSpacing: 0.8,
+    marginBottom: 3,
     fontFamily: "Helvetica-Bold",
   },
-  // Table
+  metaValue: {
+    fontSize: 10,
+    fontFamily: "Helvetica-Bold",
+    color: COLORS.textPrimary,
+  },
+  // Line items table
   table: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
-  tableHeaderRow: {
+  tableHeader: {
     flexDirection: "row",
-    borderBottomWidth: 1,
-    borderBottomColor: "#ddd",
-    paddingBottom: 6,
-    marginBottom: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderBottomWidth: 2,
+    borderBottomColor: COLORS.textPrimary,
+  },
+  tableHeaderText: {
+    fontSize: 7,
+    fontFamily: "Helvetica-Bold",
+    color: COLORS.textPrimary,
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.8,
   },
   tableRow: {
     flexDirection: "row",
-    paddingVertical: 5,
+    paddingVertical: 7,
+    paddingHorizontal: 8,
     borderBottomWidth: 0.5,
-    borderBottomColor: "#eee",
+    borderBottomColor: COLORS.border,
   },
-  colDescription: {
-    flex: 3,
+  tableRowAlt: {
+    backgroundColor: COLORS.backgroundMuted,
   },
-  colQuantity: {
-    flex: 1,
-    textAlign: "right" as const,
+  tableCell: {
+    fontSize: 9,
+    color: COLORS.textPrimary,
   },
-  colUnitPrice: {
-    flex: 1.5,
-    textAlign: "right" as const,
+  tableCellBold: {
+    fontSize: 9,
+    fontFamily: "Helvetica-Bold",
+    color: COLORS.textPrimary,
   },
-  colMvaRate: {
-    flex: 1,
-    textAlign: "right" as const,
-  },
-  colTotal: {
-    flex: 1.5,
-    textAlign: "right" as const,
-  },
-  tableHeaderText: {
-    fontSize: 8,
-    color: "#888",
-    textTransform: "uppercase" as const,
-    letterSpacing: 0.5,
-  },
-  // Totals
+  colDescription: { flex: 3.5 },
+  colQuantity: { flex: 0.8, textAlign: "right" as const },
+  colUnitPrice: { flex: 1.5, textAlign: "right" as const },
+  colMvaRate: { flex: 0.8, textAlign: "right" as const },
+  colTotal: { flex: 1.5, textAlign: "right" as const },
+  // Totals section
   totalsContainer: {
-    alignItems: "flex-end",
+    flexDirection: "row",
+    justifyContent: "flex-end",
     marginBottom: 24,
   },
   totalsBlock: {
-    width: 220,
+    width: 240,
   },
   totalsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 3,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
   },
   totalsLabel: {
-    color: "#666",
+    fontSize: 9,
+    color: COLORS.textSecondary,
   },
-  totalsValue: {},
+  totalsValue: {
+    fontSize: 9,
+    color: COLORS.textPrimary,
+  },
   totalsDivider: {
-    borderBottomWidth: 1,
-    borderBottomColor: "#ddd",
+    borderBottomWidth: 1.5,
+    borderBottomColor: COLORS.textPrimary,
     marginVertical: 4,
   },
-  totalRow: {
+  totalRowFinal: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 3,
   },
-  totalLabel: {
-    fontSize: 11,
+  totalLabelFinal: {
+    fontSize: 13,
     fontFamily: "Helvetica-Bold",
+    color: COLORS.white,
   },
-  totalValue: {
-    fontSize: 11,
+  totalValueFinal: {
+    fontSize: 13,
     fontFamily: "Helvetica-Bold",
+    color: COLORS.white,
+  },
+  // Payment info box
+  paymentSection: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 4,
+    padding: 14,
+    marginBottom: 16,
+  },
+  paymentTitle: {
+    fontSize: 8,
+    fontFamily: "Helvetica-Bold",
+    color: COLORS.textMuted,
+    textTransform: "uppercase" as const,
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  paymentGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap" as const,
+  },
+  paymentItem: {
+    width: "50%",
+    marginBottom: 6,
+  },
+  paymentKey: {
+    fontSize: 7,
+    color: COLORS.textMuted,
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.5,
+    marginBottom: 1,
+  },
+  paymentValue: {
+    fontSize: 10,
+    fontFamily: "Helvetica-Bold",
+    color: COLORS.textPrimary,
   },
   // Notes
   notesSection: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 0.5,
-    borderTopColor: "#eee",
+    marginTop: 8,
+    marginBottom: 16,
   },
   notesLabel: {
-    fontSize: 8,
-    color: "#888",
+    fontSize: 7,
+    fontFamily: "Helvetica-Bold",
+    color: COLORS.textMuted,
     textTransform: "uppercase" as const,
-    letterSpacing: 0.5,
+    letterSpacing: 1,
     marginBottom: 4,
   },
   notesText: {
     fontSize: 9,
-    color: "#444",
-    lineHeight: 1.5,
-  },
-  // Payment info
-  paymentSection: {
-    marginTop: 20,
-    padding: 12,
-    backgroundColor: "#f8f8f8",
-    borderRadius: 4,
-  },
-  paymentLabel: {
-    fontSize: 8,
-    color: "#888",
-    textTransform: "uppercase" as const,
-    letterSpacing: 0.5,
-    marginBottom: 6,
-  },
-  paymentRow: {
-    flexDirection: "row",
-    marginBottom: 2,
-  },
-  paymentKey: {
-    width: 100,
-    color: "#666",
-    fontSize: 9,
-  },
-  paymentValue: {
-    fontFamily: "Helvetica-Bold",
-    fontSize: 9,
+    color: COLORS.textSecondary,
+    lineHeight: 1.6,
   },
   // Footer
   footer: {
     position: "absolute",
-    bottom: 30,
-    left: 40,
-    right: 40,
-    textAlign: "center" as const,
+    bottom: 24,
+    left: 44,
+    right: 44,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    borderTopWidth: 0.5,
+    borderTopColor: COLORS.border,
+    paddingTop: 8,
+  },
+  footerText: {
     fontSize: 7,
-    color: "#aaa",
+    color: COLORS.textMuted,
   },
 })
 
 // --- Component ---
 
 export function InvoicePdf({ invoice, team }: InvoicePdfProps) {
+  const isCreditNote = invoice.invoiceType === "CREDIT_NOTE"
+  const accentColor = isCreditNote ? COLORS.creditRed : COLORS.navy
+  const accentLight = isCreditNote ? COLORS.creditRedLight : COLORS.navyLight
+
   // Group MVA by rate
   const mvaByRate = new Map<number, number>()
   for (const line of invoice.lines) {
@@ -293,189 +394,258 @@ export function InvoicePdf({ invoice, team }: InvoicePdfProps) {
     mvaByRate.set(line.mvaRate, existing + line.mvaAmount)
   }
 
+  const companyDisplay = team.companyName || team.name
+
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.companyName}>
-              {team.companyName || team.name}
-            </Text>
-            {team.orgNumber && (
-              <Text style={styles.infoText}>
-                Org.nr: {formatOrgNr(team.orgNumber)}
-              </Text>
-            )}
-          </View>
-          <View>
-            <Text style={styles.invoiceTitle}>FAKTURA</Text>
-            <Text style={styles.invoiceNumber}>
-              #{invoice.invoiceNumber}
-            </Text>
-          </View>
-        </View>
+        {/* Top accent bar */}
+        <View style={[styles.accentBar, { backgroundColor: accentColor }]} />
 
-        {/* From / To */}
-        <View style={styles.infoRow}>
-          <View style={styles.infoBlock}>
-            <Text style={styles.infoLabel}>Fra</Text>
-            <Text style={styles.infoBold}>
-              {team.companyName || team.name}
-            </Text>
-            {team.address && (
-              <Text style={styles.infoText}>{team.address}</Text>
-            )}
-            {(team.postalCode || team.city) && (
-              <Text style={styles.infoText}>
-                {[team.postalCode, team.city].filter(Boolean).join(" ")}
-              </Text>
-            )}
-          </View>
-          <View style={styles.infoBlock}>
-            <Text style={styles.infoLabel}>Til</Text>
-            <Text style={styles.infoBold}>{invoice.customer.name}</Text>
-            {invoice.customer.orgNumber && (
-              <Text style={styles.infoText}>
-                Org.nr: {formatOrgNr(invoice.customer.orgNumber)}
-              </Text>
-            )}
-            {invoice.customer.address && (
-              <Text style={styles.infoText}>
-                {invoice.customer.address}
-              </Text>
-            )}
-            {(invoice.customer.postalCode || invoice.customer.city) && (
-              <Text style={styles.infoText}>
-                {[invoice.customer.postalCode, invoice.customer.city]
-                  .filter(Boolean)
-                  .join(" ")}
-              </Text>
-            )}
-            {invoice.customer.email && (
-              <Text style={styles.infoText}>{invoice.customer.email}</Text>
-            )}
-          </View>
-        </View>
-
-        {/* Dates */}
-        <View style={styles.datesRow}>
-          <View style={styles.dateBlock}>
-            <Text style={styles.dateLabel}>Fakturanummer</Text>
-            <Text style={styles.dateValue}>#{invoice.invoiceNumber}</Text>
-          </View>
-          <View style={styles.dateBlock}>
-            <Text style={styles.dateLabel}>Fakturadato</Text>
-            <Text style={styles.dateValue}>
-              {formatNorwegianDate(invoice.issueDate)}
-            </Text>
-          </View>
-          <View style={styles.dateBlock}>
-            <Text style={styles.dateLabel}>Forfallsdato</Text>
-            <Text style={styles.dateValue}>
-              {formatNorwegianDate(invoice.dueDate)}
-            </Text>
-          </View>
-        </View>
-
-        {/* Line items table */}
-        <View style={styles.table}>
-          {/* Table header */}
-          <View style={styles.tableHeaderRow}>
-            <Text style={[styles.tableHeaderText, styles.colDescription]}>
-              Beskrivelse
-            </Text>
-            <Text style={[styles.tableHeaderText, styles.colQuantity]}>
-              Antall
-            </Text>
-            <Text style={[styles.tableHeaderText, styles.colUnitPrice]}>
-              Enhetspris
-            </Text>
-            <Text style={[styles.tableHeaderText, styles.colMvaRate]}>
-              MVA
-            </Text>
-            <Text style={[styles.tableHeaderText, styles.colTotal]}>Sum</Text>
-          </View>
-
-          {/* Table body */}
-          {invoice.lines.map((line, index) => (
-            <View key={index} style={styles.tableRow}>
-              <Text style={styles.colDescription}>{line.description}</Text>
-              <Text style={styles.colQuantity}>{line.quantity}</Text>
-              <Text style={styles.colUnitPrice}>
-                {formatNorwegianCurrency(line.unitPrice)} kr
-              </Text>
-              <Text style={styles.colMvaRate}>{line.mvaRate}%</Text>
-              <Text style={styles.colTotal}>
-                {formatNorwegianCurrency(line.lineTotal)} kr
-              </Text>
+        <View style={styles.content}>
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.headerLeft}>
+              {team.logoUrl && (
+                <Image src={team.logoUrl} style={styles.logo} />
+              )}
+              <View>
+                <Text style={styles.companyName}>{companyDisplay}</Text>
+                {team.orgNumber && (
+                  <Text style={styles.companyOrgNr}>
+                    Org.nr {formatOrgNr(team.orgNumber)}
+                  </Text>
+                )}
+              </View>
             </View>
-          ))}
-        </View>
-
-        {/* Totals */}
-        <View style={styles.totalsContainer}>
-          <View style={styles.totalsBlock}>
-            <View style={styles.totalsRow}>
-              <Text style={styles.totalsLabel}>Delbeløp</Text>
-              <Text style={styles.totalsValue}>
-                {formatNorwegianCurrency(invoice.subtotal)} kr
+            <View style={styles.headerRight}>
+              <Text style={[styles.invoiceTitle, { color: accentColor }]}>
+                {isCreditNote ? "KREDITNOTA" : "FAKTURA"}
               </Text>
-            </View>
-            {Array.from(mvaByRate.entries()).map(([rate, amount]) => (
-              <View key={rate} style={styles.totalsRow}>
-                <Text style={styles.totalsLabel}>MVA {rate}%</Text>
-                <Text style={styles.totalsValue}>
-                  {formatNorwegianCurrency(amount)} kr
+              <View
+                style={[
+                  styles.invoiceNumberBadge,
+                  { backgroundColor: accentLight },
+                ]}
+              >
+                <Text style={styles.invoiceNumberText}>
+                  #{invoice.invoiceNumber}
                 </Text>
               </View>
-            ))}
-            <View style={styles.totalsDivider} />
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Totalt</Text>
-              <Text style={styles.totalValue}>
-                {formatNorwegianCurrency(invoice.total)} kr
-              </Text>
             </View>
           </View>
-        </View>
 
-        {/* Notes */}
-        {invoice.notes && (
-          <View style={styles.notesSection}>
-            <Text style={styles.notesLabel}>Notater</Text>
-            <Text style={styles.notesText}>{invoice.notes}</Text>
-          </View>
-        )}
-
-        {/* Payment information */}
-        {team.bankAccount && (
-          <View style={styles.paymentSection}>
-            <Text style={styles.paymentLabel}>Betalingsinformasjon</Text>
-            <View style={styles.paymentRow}>
-              <Text style={styles.paymentKey}>Kontonummer:</Text>
-              <Text style={styles.paymentValue}>{team.bankAccount}</Text>
+          {/* Parties: From / To */}
+          <View style={styles.partiesRow}>
+            <View style={styles.partyBlock}>
+              <Text style={styles.partyLabel}>Fra</Text>
+              <Text style={styles.partyName}>{companyDisplay}</Text>
+              {team.address && (
+                <Text style={styles.partyDetail}>{team.address}</Text>
+              )}
+              {(team.postalCode || team.city) && (
+                <Text style={styles.partyDetail}>
+                  {[team.postalCode, team.city].filter(Boolean).join(" ")}
+                </Text>
+              )}
+              {team.orgNumber && (
+                <Text style={styles.partyDetail}>
+                  Org.nr: {formatOrgNr(team.orgNumber)}
+                </Text>
+              )}
             </View>
-            <View style={styles.paymentRow}>
-              <Text style={styles.paymentKey}>Beløp:</Text>
-              <Text style={styles.paymentValue}>
-                {formatNorwegianCurrency(invoice.total)} kr
+            <View style={styles.partyBlock}>
+              <Text style={styles.partyLabel}>Til</Text>
+              <Text style={styles.partyName}>{invoice.customer.name}</Text>
+              {invoice.customer.orgNumber && (
+                <Text style={styles.partyDetail}>
+                  Org.nr: {formatOrgNr(invoice.customer.orgNumber)}
+                </Text>
+              )}
+              {invoice.customer.address && (
+                <Text style={styles.partyDetail}>
+                  {invoice.customer.address}
+                </Text>
+              )}
+              {(invoice.customer.postalCode || invoice.customer.city) && (
+                <Text style={styles.partyDetail}>
+                  {[invoice.customer.postalCode, invoice.customer.city]
+                    .filter(Boolean)
+                    .join(" ")}
+                </Text>
+              )}
+              {invoice.customer.email && (
+                <Text style={styles.partyDetail}>
+                  {invoice.customer.email}
+                </Text>
+              )}
+            </View>
+          </View>
+
+          {/* Metadata strip */}
+          <View style={styles.metaStrip}>
+            <View style={styles.metaItem}>
+              <Text style={styles.metaLabel}>
+                {isCreditNote ? "Kreditnota nr." : "Fakturanummer"}
+              </Text>
+              <Text style={styles.metaValue}>#{invoice.invoiceNumber}</Text>
+            </View>
+            <View style={styles.metaItem}>
+              <Text style={styles.metaLabel}>Fakturadato</Text>
+              <Text style={styles.metaValue}>
+                {formatNorwegianDate(invoice.issueDate)}
               </Text>
             </View>
-            <View style={styles.paymentRow}>
-              <Text style={styles.paymentKey}>Forfallsdato:</Text>
-              <Text style={styles.paymentValue}>
+            <View style={styles.metaItem}>
+              <Text style={styles.metaLabel}>Forfallsdato</Text>
+              <Text style={styles.metaValue}>
                 {formatNorwegianDate(invoice.dueDate)}
               </Text>
             </View>
+            {invoice.kidNumber && (
+              <View style={styles.metaItem}>
+                <Text style={styles.metaLabel}>KID-nummer</Text>
+                <Text style={styles.metaValue}>{invoice.kidNumber}</Text>
+              </View>
+            )}
           </View>
-        )}
+
+          {/* Line items table */}
+          <View style={styles.table}>
+            <View style={styles.tableHeader}>
+              <Text style={[styles.tableHeaderText, styles.colDescription]}>
+                Beskrivelse
+              </Text>
+              <Text style={[styles.tableHeaderText, styles.colQuantity]}>
+                Antall
+              </Text>
+              <Text style={[styles.tableHeaderText, styles.colUnitPrice]}>
+                Enhetspris
+              </Text>
+              <Text style={[styles.tableHeaderText, styles.colMvaRate]}>
+                MVA
+              </Text>
+              <Text style={[styles.tableHeaderText, styles.colTotal]}>
+                Sum
+              </Text>
+            </View>
+
+            {invoice.lines.map((line, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.tableRow,
+                  index % 2 === 1 ? styles.tableRowAlt : {},
+                ]}
+              >
+                <Text style={[styles.tableCell, styles.colDescription]}>
+                  {line.description}
+                </Text>
+                <Text style={[styles.tableCell, styles.colQuantity]}>
+                  {line.quantity}
+                </Text>
+                <Text style={[styles.tableCell, styles.colUnitPrice]}>
+                  {formatNorwegianCurrency(line.unitPrice)} kr
+                </Text>
+                <Text style={[styles.tableCell, styles.colMvaRate]}>
+                  {line.mvaRate}%
+                </Text>
+                <Text style={[styles.tableCellBold, styles.colTotal]}>
+                  {formatNorwegianCurrency(line.lineTotal)} kr
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          {/* Totals */}
+          <View style={styles.totalsContainer}>
+            <View style={styles.totalsBlock}>
+              <View style={styles.totalsRow}>
+                <Text style={styles.totalsLabel}>Delbeloep</Text>
+                <Text style={styles.totalsValue}>
+                  {formatNorwegianCurrency(invoice.subtotal)} kr
+                </Text>
+              </View>
+              {Array.from(mvaByRate.entries()).map(([rate, amount]) => (
+                <View key={rate} style={styles.totalsRow}>
+                  <Text style={styles.totalsLabel}>MVA {rate}%</Text>
+                  <Text style={styles.totalsValue}>
+                    {formatNorwegianCurrency(amount)} kr
+                  </Text>
+                </View>
+              ))}
+              <View style={styles.totalsDivider} />
+              <View
+                style={[
+                  styles.totalRowFinal,
+                  { backgroundColor: accentColor },
+                ]}
+              >
+                <Text style={styles.totalLabelFinal}>Totalt</Text>
+                <Text style={styles.totalValueFinal}>
+                  {formatNorwegianCurrency(invoice.total)} kr
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Payment information */}
+          {team.bankAccount && (
+            <View style={styles.paymentSection}>
+              <Text style={styles.paymentTitle}>Betalingsinformasjon</Text>
+              <View style={styles.paymentGrid}>
+                <View style={styles.paymentItem}>
+                  <Text style={styles.paymentKey}>Kontonummer</Text>
+                  <Text style={styles.paymentValue}>{team.bankAccount}</Text>
+                </View>
+                <View style={styles.paymentItem}>
+                  <Text style={styles.paymentKey}>Beloep</Text>
+                  <Text style={styles.paymentValue}>
+                    {formatNorwegianCurrency(invoice.total)} kr
+                  </Text>
+                </View>
+                {invoice.kidNumber && (
+                  <View style={styles.paymentItem}>
+                    <Text style={styles.paymentKey}>KID-nummer</Text>
+                    <Text style={styles.paymentValue}>
+                      {invoice.kidNumber}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.paymentItem}>
+                  <Text style={styles.paymentKey}>Forfallsdato</Text>
+                  <Text style={styles.paymentValue}>
+                    {formatNorwegianDate(invoice.dueDate)}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Notes */}
+          {invoice.notes && (
+            <View style={styles.notesSection}>
+              <Text style={styles.notesLabel}>Notater</Text>
+              <Text style={styles.notesText}>{invoice.notes}</Text>
+            </View>
+          )}
+        </View>
 
         {/* Footer */}
-        <Text style={styles.footer}>
-          {team.companyName || team.name}
-          {team.orgNumber ? ` | Org.nr: ${formatOrgNr(team.orgNumber)}` : ""}
-        </Text>
+        <View style={styles.footer} fixed>
+          <Text style={styles.footerText}>{companyDisplay}</Text>
+          <Text style={styles.footerText}>
+            {team.orgNumber
+              ? `Org.nr: ${formatOrgNr(team.orgNumber)}`
+              : ""}
+            {team.mvaRegistered ? " | MVA-registrert" : ""}
+          </Text>
+          <Text style={styles.footerText}>
+            {team.bankAccount
+              ? `Konto: ${team.bankAccount}`
+              : ""}
+          </Text>
+        </View>
       </Page>
     </Document>
   )

@@ -1,15 +1,15 @@
 import { renderToBuffer } from "@react-pdf/renderer"
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
-import { InvoicePdf } from "@/components/invoice-pdf"
+import { PayslipPdf } from "@/components/payslip-pdf"
 import { NextResponse } from "next/server"
 import React from "react"
 
 export async function GET(
   _request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ runId: string; entryId: string }> }
 ) {
-  const { id } = await params
+  const { runId, entryId } = await params
 
   const session = await auth()
   if (!session?.user?.id) {
@@ -27,17 +27,22 @@ export async function GET(
 
   const team = membership.team
 
-  const invoice = await db.invoice.findFirst({
-    where: { id, teamId: team.id },
+  // Get the payroll entry with employee and run info
+  const entry = await db.payrollEntry.findFirst({
+    where: {
+      id: entryId,
+      payrollRunId: runId,
+      payrollRun: { teamId: team.id },
+    },
     include: {
-      customer: true,
-      lines: true,
+      employee: true,
+      payrollRun: true,
     },
   })
 
-  if (!invoice) {
+  if (!entry) {
     return NextResponse.json(
-      { error: "Faktura ikke funnet" },
+      { error: "Lønnspost ble ikke funnet" },
       { status: 404 }
     )
   }
@@ -49,40 +54,39 @@ export async function GET(
     address: team.address,
     city: team.city,
     postalCode: team.postalCode,
-    bankAccount: team.bankAccount,
-    logoUrl: team.logoUrl,
-    mvaRegistered: team.mvaRegistered,
   }
 
-  const pdfInvoice = {
-    invoiceNumber: invoice.invoiceNumber,
-    invoiceType: invoice.invoiceType as "INVOICE" | "CREDIT_NOTE",
-    kidNumber: invoice.kidNumber,
-    issueDate: invoice.issueDate,
-    dueDate: invoice.dueDate,
-    subtotal: invoice.subtotal,
-    mvaAmount: invoice.mvaAmount,
-    total: invoice.total,
-    notes: invoice.notes,
-    lines: invoice.lines,
-    customer: invoice.customer,
+  const pdfEmployee = {
+    name: entry.employee.name,
+    position: entry.employee.position,
+    bankAccount: entry.employee.bankAccount,
+  }
+
+  const pdfEntry = {
+    grossAmount: entry.grossAmount,
+    taxAmount: entry.taxAmount,
+    pensionAmount: entry.pensionAmount,
+    netAmount: entry.netAmount,
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const buffer = await renderToBuffer(
-    React.createElement(InvoicePdf, {
-      invoice: pdfInvoice,
+    React.createElement(PayslipPdf, {
       team: pdfTeam,
+      employee: pdfEmployee,
+      entry: pdfEntry,
+      period: entry.payrollRun.period,
+      taxPercent: entry.employee.taxPercent,
+      pensionPercent: entry.employee.pensionPercent,
     }) as any
   )
 
-  const typeLabel =
-    invoice.invoiceType === "CREDIT_NOTE" ? "kreditnota" : "faktura"
+  const safeName = entry.employee.name.replace(/\s+/g, "-").toLowerCase()
 
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${typeLabel}-${invoice.invoiceNumber}.pdf"`,
+      "Content-Disposition": `inline; filename="lonnsslipp-${safeName}-${entry.payrollRun.period}.pdf"`,
     },
   })
 }

@@ -2,7 +2,7 @@ import { getCurrentTeam } from "@/lib/auth-utils"
 import { SettingsForm } from "./settings-form"
 
 export const metadata = {
-  title: "Innstillinger | Bokført",
+  title: "Innstillinger | Bokfort",
 }
 
 export default async function SettingsPage() {
@@ -10,13 +10,15 @@ export default async function SettingsPage() {
   const isAdmin = role === "ADMIN"
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Innstillinger</h1>
-        <p className="text-muted-foreground">
-          Administrer firma- og fakturainnstillinger
+    <div className="max-w-4xl mx-auto">
+      <header className="mb-10">
+        <h2 className="text-2xl font-bold text-slate-900">
+          Innstillinger
+        </h2>
+        <p className="text-slate-500 mt-1">
+          Administrer konto, firmaprofil og faktureringsinnstillinger.
         </p>
-      </div>
+      </header>
 
       <SettingsForm
         team={{

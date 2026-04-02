@@ -84,6 +84,7 @@ export default async function FakturaDetailPage({
         status={invoice.status}
         invoiceType={invoice.invoiceType}
         hasOrgNumber={!!team.orgNumber}
+        customerEmail={invoice.customer.email}
       />
 
       {/* Credit note context */}
